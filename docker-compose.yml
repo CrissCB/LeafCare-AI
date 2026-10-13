@@ -1,0 +1,64 @@
+version: '3.8'
+
+
+services: 
+  # Servicio Backend (PocketBase)
+  pocketbase:
+    hostname: pocketbase
+    build:
+      context: ./pocketbase
+      dockerfile: Dockerfile
+      args:
+        PB_VERSION: "0.40.5"
+    container_name: pocketbase_backend
+    restart: unless-stopped
+    # Seguridad: Unir solo a localhost del host para evitar exposición directa si hay Proxy Inverso
+    # Si estás en desarrollo local sin proxy, puedes cambiar a "8080:8080"
+    # ports:
+    #   - "127.0.0.1:8082:8082"
+    expose:
+      - "8082"
+    environment:
+      - TZ=UTC
+    volumes:
+      # Persistencia estricta de SQLite y configuraciones de admin
+      - pb_data:/pb/pb_data
+      # Opcional: Montar carpetas locales si vas a desarrollar Hooks o Migraciones
+      - ./Backend/pb_migrations:/pb/pb_migrations
+      - ./Backend/pb_public:/pb/pb_public
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./leafcare_ia # Carpeta donde está tu frontend de Next.js
+      dockerfile: Dockerfile
+      args:
+        # Cambia esto por 'http://localhost:8082' si pruebas local sin proxy,
+        # o por tu dominio/IP pública cuando lo subas a producción con proxy inverso.
+        - NEXT_PUBLIC_POCKETBASE_URL=https://inventic.udenar.edu.co
+    container_name: nextjs_frontend
+    restart: unless-stopped
+    # ports:
+    #   - "3000:3000"
+    expose:
+      - "3000"
+    networks:
+      - app-network
+    depends_on:
+      pocketbase:
+        condition: service_healthy # Espera a que PocketBase esté completamente sano antes de levantar Next.js
+
+volumes:
+  pb_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

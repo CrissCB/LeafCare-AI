@@ -18,6 +18,12 @@ WORKDIR /pb
 ADD https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip /tmp/pb.zip
 RUN unzip /tmp/pb.zip -d /pb/ && rm /tmp/pb.zip
 
+# Crear carpetas necesarias
+RUN mkdir -p /pb/pb_data /pb/pb_public /pb/pb_migrations /pb/pb_hooks
+
+# Copiar el archivo zip del backup al contenedor (si existe)
+COPY backup_inicial.zip /tmp/backup_inicial.zip
+
 # Script de entrada inteligente
 RUN echo '#!/bin/sh' > /pb/entrypoint.sh && \
     echo 'if [ -f /tmp/backup_inicial.zip ] && [ ! -f /pb/pb_data/data.db ]; then' >> /pb/entrypoint.sh && \
