@@ -38,6 +38,10 @@ dependencies:
   # SDK de PocketBase para conectar con el backend local
   pocketbase: ^0.25.2
 
+  # Tipografía del diseño (Outfit / Inter) e íconos SVG
+  google_fonts: ^6.3.3
+  flutter_svg: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
