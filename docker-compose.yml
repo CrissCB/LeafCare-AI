@@ -1,0 +1,47 @@
+services:
+  # Backend local: PocketBase (API + panel admin)
+  # Publicado en http://127.0.0.1:8082
+  pocketbase:
+    hostname: pocketbase
+    build:
+      context: ./pocketbase
+      dockerfile: Dockerfile
+      args:
+        PB_VERSION: "0.40.5"
+    container_name: pocketbase_backend
+    restart: unless-stopped
+    # Publicado en localhost para desarrollo
+    ports:
+      - "127.0.0.1:8082:8082"
+    environment:
+      - TZ=UTC
+    volumes:
+      # Persistencia del SQLite y configuración del admin
+      - pb_data:/pb/pb_data
+      # Opcional: descomenta para desarrollar hooks/migraciones locales
+      # - ./pocketbase/pb_migrations:/pb/pb_migrations
+      # - ./pocketbase/pb_public:/pb/pb_public
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Frontend local: app Flutter Web servida con nginx
+  # Accesible en http://127.0.0.1:8080
+  frontend:
+    build:
+      context: ./leafcare_ia
+      dockerfile: Dockerfile
+    container_name: leafcare_frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+volumes:
+  pb_data:
+    driver: local
