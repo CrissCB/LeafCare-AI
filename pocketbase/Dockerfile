@@ -18,13 +18,18 @@ RUN unzip /tmp/pb.zip -d /pb/ && rm /tmp/pb.zip
 # Carpetas necesarias
 RUN mkdir -p /pb/pb_data /pb/pb_public /pb/pb_migrations /pb/pb_hooks
 
-# Script de entrada: restaura un backup si se monta en /tmp/backup_inicial.zip
-# (opcional; si no existe, arranca con una base de datos nueva)
+# Copiar el backup inicial dentro de la imagen.
+# Se restaura solo cuando la base de datos está vacía (primer arranque).
+COPY backup_ejemplo_20102026.zip /tmp/backup_inicial.zip
+
+# Script de entrada: restaura el backup si la base de datos todavía no existe.
+# Si ya existe data.db, no toca nada y arranca con los datos actuales.
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'if [ -f /tmp/backup_inicial.zip ] && [ ! -f /pb/pb_data/data.db ]; then' \
     '  echo "Restaurando backup inicial de PocketBase..."' \
     '  unzip -o /tmp/backup_inicial.zip -d /pb/pb_data/' \
+    '  rm -f /tmp/backup_inicial.zip' \
     'fi' \
     'exec /pb/pocketbase serve --http=0.0.0.0:8082' \
     > /pb/entrypoint.sh && chmod +x /pb/entrypoint.sh
