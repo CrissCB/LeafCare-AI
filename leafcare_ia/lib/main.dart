@@ -1,22 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'screens/login_screen.dart';
-import 'theme/app_theme.dart';
+import 'package:leafcare_ia/app/app.dart';
+import 'package:leafcare_ia/core/network/pocketbase_client.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const LeafCareApp());
-}
-
-class LeafCareApp extends StatelessWidget {
-  const LeafCareApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'LeafCare AI',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      home: const LoginScreen(),
-    );
-  }
 }

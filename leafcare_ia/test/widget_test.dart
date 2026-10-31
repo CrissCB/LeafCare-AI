@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:leafcare_ia/main.dart';
+import 'package:leafcare_ia/app/app.dart';
 
 void main() {
   setUpAll(() {

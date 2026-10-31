@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
+import 'package:leafcare_ia/app/config/app_theme.dart';
 
 /// Logo de hoja de LeafCare AI dibujado con [CustomPainter] (viewBox 0 0 40 40).
 class LeafLogo extends StatelessWidget {
@@ -10,10 +10,7 @@ class LeafLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _LeafPainter(),
-    );
+    return CustomPaint(size: Size.square(size), painter: _LeafPainter());
   }
 }
 
