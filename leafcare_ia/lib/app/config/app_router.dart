@@ -15,6 +15,9 @@ import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen
 // alerts imports
 import 'package:leafcare_ia/features/alerts/presentation/screens/alerts_screen.dart';
 // blog imports
+import 'package:leafcare_ia/features/blog/data/datasources/rss_blog_datasource.dart';
+import 'package:leafcare_ia/features/blog/data/repositories/blog_repository.dart';
+import 'package:leafcare_ia/features/blog/presentation/bloc/blog_bloc.dart';
 import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart';
 // profile imports
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
@@ -69,7 +72,14 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/blog',
-              builder: (context, state) => const BlogScreen(),
+              builder: (context, state) => BlocProvider(
+                create: (_) => BlogBloc(
+                  repository: BlogRepository(
+                    rssDatasource: RssBlogDatasource(),
+                  ),
+                )..add(BlogStarted()),
+                child: const BlogScreen(),
+              ),
             ),
           ],
         ),

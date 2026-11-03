@@ -21,4 +21,7 @@ class ApiConstants {
 
   static const String rssToJasonUrl =
       'https://api.rss2json.com/v1/api.json?rss_url=';
+
+  // Feed de jardinería en español (se convierte a JSON con rss2json)
+  static const String gardeningRssUrl = 'https://www.jardineriaon.com/feed';
 }
