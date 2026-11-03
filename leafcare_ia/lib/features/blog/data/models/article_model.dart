@@ -9,6 +9,7 @@ class ArticleModel {
     required this.link,
     required this.description,
     this.saved = false,
+    this.savedRecordId,
   });
 
   final String id;
@@ -20,8 +21,9 @@ class ArticleModel {
   final String link;
   final String description;
   final bool saved;
+  final String? savedRecordId;
 
-  ArticleModel copyWith({bool? saved}) {
+  ArticleModel copyWith({bool? saved, String? savedRecordId}) {
     return ArticleModel(
       id: id,
       title: title,
@@ -32,6 +34,36 @@ class ArticleModel {
       link: link,
       description: description,
       saved: saved ?? this.saved,
+      savedRecordId: savedRecordId ?? this.savedRecordId,
     );
+  }
+
+  // Mapeo desde la respuesta de PocketBase a ArticleModel
+  factory ArticleModel.fromPocketBase(Map<String, dynamic> json) {
+    return ArticleModel(
+      id: json['external_article_id'] as String? ?? '',
+      title: json['title'] as String? ?? 'Sin título',
+      author: json['author'] as String? ?? 'Redacción',
+      category: json['category'] as String? ?? 'Jardinería',
+      imageUrl: json['image_url'] as String? ?? '',
+      readTime: json['read_time'] as String? ?? '3 min',
+      link: json['external_article_id'] as String? ?? '',
+      description: '',
+      saved: true,
+      savedRecordId: json['id'] as String?,
+    );
+  }
+
+  // Mapeo desde ArticleModel a la estructura esperada por PocketBase
+  Map<String, dynamic> toPocketBase(String userId) {
+    return {
+      'user_id': userId,
+      'external_article_id': id,
+      'title': title,
+      'category': category,
+      'author': author,
+      'read_time': readTime,
+      'image_url': imageUrl,
+    };
   }
 }

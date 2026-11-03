@@ -29,10 +29,22 @@ class RssBlogDatasource {
 
   ArticleModel _fromRssItem(Map<String, dynamic> item) {
     final content = (item['content'] as String?) ?? '';
+    final description = (item['description'] as String?) ?? '';
     final categories = item['categories'];
     final category = categories is List && categories.isNotEmpty
         ? '${categories.first}'
         : 'Jardinería';
+
+    String imageUrl = (item['thumbnail'] as String?)?.trim() ?? '';
+
+    if (imageUrl.isEmpty) {
+      imageUrl =
+          _extractImageUrl(content) ?? _extractImageUrl(description) ?? '';
+    }
+
+    final cleanDescription = description
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .trim();
 
     return ArticleModel(
       id: (item['guid'] as String?)?.trim().isNotEmpty == true
@@ -43,11 +55,17 @@ class RssBlogDatasource {
           ? item['author'] as String
           : 'Redacción',
       category: category,
-      imageUrl: (item['thumbnail'] as String?) ?? '',
+      imageUrl: imageUrl,
       readTime: _readTimeFrom(content),
       link: (item['link'] as String?) ?? '',
-      description: (item['description'] as String?)?.trim() ?? '',
+      description: cleanDescription,
     );
+  }
+
+  String? _extractImageUrl(String html) {
+    final regExp = RegExp(r'<img[^>]+src="([^">]+)"');
+    final match = regExp.firstMatch(html);
+    return match?.group(1);
   }
 
   String _readTimeFrom(String html) {

@@ -21,7 +21,9 @@ class BlogRepository {
     if (savedIds.isEmpty) return articles;
 
     return articles
-        .map((article) => article.copyWith(saved: savedIds.contains(article.id)))
+        .map(
+          (article) => article.copyWith(saved: savedIds.contains(article.id)),
+        )
         .toList(growable: false);
   }
 
@@ -52,7 +54,6 @@ class BlogRepository {
             'category': article.category,
             'image_url': article.imageUrl,
             'read_time': article.readTime,
-            'saved': true,
             'user_id': userId,
           },
         );

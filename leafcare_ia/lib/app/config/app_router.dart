@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 // Main Shell import
@@ -88,20 +89,20 @@ GoRouter createRouter(AuthBloc authBloc) {
             ],
           ),
           StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/blog',
-              builder: (context, state) => BlocProvider(
-                create: (_) => BlogBloc(
-                  repository: BlogRepository(
-                    rssDatasource: RssBlogDatasource(),
-                  ),
-                )..add(BlogStarted()),
-                child: const BlogScreen(),
+            routes: [
+              GoRoute(
+                path: '/blog',
+                builder: (context, state) => BlocProvider(
+                  create: (_) => BlogBloc(
+                    repository: BlogRepository(
+                      rssDatasource: RssBlogDatasource(),
+                    ),
+                  )..add(BlogStarted()),
+                  child: const BlogScreen(),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
