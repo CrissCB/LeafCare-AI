@@ -52,11 +52,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _onLoginPressed() {
     FocusScope.of(context).unfocus();
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      _snack('Ingresa tu correo y contraseña', error: true);
+      return;
+    }
+
     context.read<AuthBloc>().add(
-      LoginSubmitted(
-        email: _emailController.text,
-        password: _passwordController.text,
-      ),
+      LoginSubmittedEvent(email: email, password: password),
     );
   }
 
@@ -144,17 +150,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     // BOTÓN INICIAR SESIÓN CON BLoC
                     BlocConsumer<AuthBloc, AuthState>(
                       listener: (context, state) {
-                        if (state is AuthSuccess) {
+                        if (state is AuthenticatedState) {
                           context.go('/dashboard');
-                        } else if (state is AuthError) {
+                        } else if (state is AuthErrorState) {
                           _snack(state.message, error: true);
                         }
                       },
                       builder: (context, state) {
                         return CustomButton(
                           label: 'Iniciar Sesión',
-                          loading: state is AuthLoading,
-                          onTap: state is AuthLoading ? null : _onLoginPressed,
+                          loading: state is AuthLoadingState,
+                          onTap: state is AuthLoadingState
+                              ? null
+                              : _onLoginPressed,
                         );
                       },
                     ),
@@ -223,40 +231,46 @@ class _LoginHeader extends StatelessWidget {
             left: -40,
             child: _circle(120, AppColors.neon05),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 24, bottom: 36),
-            child: Column(
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: AppColors.neon12,
-                    border: Border.all(color: AppColors.neon35, width: 1.5),
-                    borderRadius: BorderRadius.circular(22),
+          SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center, // Cambiar a CrossAxisAlignment.start si deseas alinearlo a la izquierda
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.neon12,
+                      border: Border.all(color: AppColors.neon35, width: 1.5),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: const Center(child: LeafLogo(size: 40)),
                   ),
-                  child: const Center(child: LeafLogo(size: 40)),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'LeafCare AI',
-                  style: GoogleFonts.outfit(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.white,
-                    letterSpacing: -0.5,
+                  const SizedBox(height: 12),
+                  Text(
+                    'LeafCare AI',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.white,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Diagnóstico inteligente para tus plantas',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.white.withValues(alpha: 0.6),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Diagnóstico inteligente para tus plantas',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.white.withValues(alpha: 0.7),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
