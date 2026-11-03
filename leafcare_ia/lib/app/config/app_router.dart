@@ -1,74 +1,93 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 // Main Shell import
 import 'package:leafcare_ia/core/widgets/main_shell.dart';
 
-// login imports
-import 'package:leafcare_ia/features/auth/data/datasources/auth_remote_datasource.dart';
+// Auth imports
 import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/login_screen.dart';
-// dashboard imports
+import 'package:leafcare_ia/features/auth/presentation/screens/register_screen.dart';
+// Dashboard imports
 import 'package:leafcare_ia/features/dashboard/presentation/screens/home_screen.dart';
-// scanner imports
+// Scanner imports
 import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen.dart';
-// alerts imports
+// Alerts imports
 import 'package:leafcare_ia/features/alerts/presentation/screens/alerts_screen.dart';
-// blog imports
+// Blog imports
 import 'package:leafcare_ia/features/blog/data/datasources/rss_blog_datasource.dart';
 import 'package:leafcare_ia/features/blog/data/repositories/blog_repository.dart';
 import 'package:leafcare_ia/features/blog/presentation/bloc/blog_bloc.dart';
 import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart';
-// profile imports
+// Profile imports
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
 
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/login',
-  routes: [
-    // Ruta de Login
-    GoRoute(
-      path: '/login',
-      builder: (context, state) => BlocProvider(
-        create: (_) => AuthBloc(datasource: AuthRemoteDatasource()),
-        child: const LoginScreen(),
-      ),
-    ),
+import 'go_router_refresh_stream.dart';
 
-    // Rutas con Barra de Navegación Inferior (Shell)
-    StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) {
-        return MainShell(navigationShell: navigationShell);
-      },
-      branches: [
-        // Rama 0: Inicio / Dashboard
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/dashboard',
-              builder: (context, state) => const HomeScreen(),
-            ),
-          ],
-        ),
-        // Rama 1: Alertas
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/alerts',
-              builder: (context, state) => const AlertsScreen(),
-            ),
-          ],
-        ),
-        // Rama 2: Escáner
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/scan',
-              builder: (context, state) => const ScanScreen(),
-            ),
-          ],
-        ),
-        // Rama 3: Blog
-        StatefulShellBranch(
+GoRouter createRouter(AuthBloc authBloc) {
+  return GoRouter(
+    initialLocation: '/dashboard',
+    refreshListenable: GoRouterRefreshStream(authBloc.stream),
+    redirect: (BuildContext context, GoRouterState state) {
+      final authState = authBloc.state;
+      final isLoggingIn =
+          state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register';
+
+      if (authState is AuthInitialState || authState is AuthLoadingState) {
+        return null;
+      }
+
+      final isAuthenticated = authState is AuthenticatedState;
+
+      if (!isAuthenticated && !isLoggingIn) {
+        return '/login';
+      }
+
+      if (isAuthenticated && isLoggingIn) {
+        return '/dashboard';
+      }
+
+      return null;
+    },
+    routes: [
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+
+      // Rutas Protegidas dentro de la Shell de Navegación
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard',
+                builder: (context, state) => const HomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/alerts',
+                builder: (context, state) => const AlertsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/scan',
+                builder: (context, state) => const ScanScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
           routes: [
             GoRoute(
               path: '/blog',
@@ -83,16 +102,16 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Rama 4: Perfil
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
-            ),
-          ],
-        ),
-      ],
-    ),
-  ],
-);
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile',
+                builder: (context, state) => const ProfileScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+}
