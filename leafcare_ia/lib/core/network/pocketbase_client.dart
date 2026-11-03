@@ -6,17 +6,18 @@ class PocketBaseClient {
   static PocketBase? _instance;
 
   static Future<PocketBase> getInstance() async {
-    if (_instance == null) {
-      final prefs = await SharedPreferences.getInstance();
+    if (_instance != null) return _instance!;
 
-      // AuthStore
-      final store = AsyncAuthStore(
-        save: (String data) async => prefs.setString('pb_auth', data),
-        initial: prefs.getString('pb_auth'),
-      );
+    final prefs = await SharedPreferences.getInstance();
 
-      _instance = PocketBase(ApiConstants.pocketbaseBaseUrl, authStore: store);
-    }
+    // AuthStore
+    final store = AsyncAuthStore(
+      save: (String data) async => prefs.setString('pb_auth', data),
+      clear: () async => prefs.remove('pb_auth'),
+      initial: prefs.getString('pb_auth'),
+    );
+
+    _instance = PocketBase(ApiConstants.pocketbaseBaseUrl, authStore: store);
 
     return _instance!;
   }

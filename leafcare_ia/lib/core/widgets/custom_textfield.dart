@@ -105,7 +105,14 @@ class _CustomTextFieldState extends State<CustomTextField> {
                   ),
                   decoration: InputDecoration(
                     isCollapsed: true,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
                     hintText: widget.hint,
                     hintStyle: GoogleFonts.inter(
                       fontSize: 14,
