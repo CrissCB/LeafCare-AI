@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// Cliente HTTP mínimo para APIs de terceros (RSS, Pl@ntNet, Perenual).
+/// Cliente HTTP para APIs de terceros (RSS, Pl@ntNet, Perenual).
 class AppHttpClient {
   const AppHttpClient();
 
