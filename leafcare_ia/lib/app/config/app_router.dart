@@ -10,6 +10,7 @@ import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/login_screen.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/register_screen.dart';
 // Dashboard imports
+import 'package:leafcare_ia/features/dashboard/presentation/screens/all_plants_screen.dart';
 import 'package:leafcare_ia/features/dashboard/presentation/screens/home_screen.dart';
 // Scanner imports
 import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen.dart';
@@ -21,7 +22,13 @@ import 'package:leafcare_ia/features/blog/data/repositories/blog_repository.dart
 import 'package:leafcare_ia/features/blog/presentation/bloc/blog_bloc.dart';
 import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart';
 // Profile imports
+import 'package:leafcare_ia/features/profile/presentation/screens/about_screen.dart';
+import 'package:leafcare_ia/features/profile/presentation/screens/account_screen.dart';
+import 'package:leafcare_ia/features/profile/presentation/screens/notifications_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
+import 'package:leafcare_ia/features/profile/presentation/screens/security_screen.dart';
+// Plant detail imports
+import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 
 import 'go_router_refresh_stream.dart';
 
@@ -56,6 +63,38 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+
+      // Detalle de una planta (pantalla completa con botón de regresar)
+      GoRoute(
+        path: '/plant/:id',
+        builder: (context, state) => PlantDetailScreen(
+          plantId: state.pathParameters['id']!,
+        ),
+      ),
+
+      // Lista completa de plantas
+      GoRoute(
+        path: '/plants',
+        builder: (context, state) => const AllPlantsScreen(),
+      ),
+
+      // Pantallas internas del perfil
+      GoRoute(
+        path: '/account',
+        builder: (context, state) => const AccountScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/security',
+        builder: (context, state) => const SecurityScreen(),
+      ),
+      GoRoute(
+        path: '/about',
+        builder: (context, state) => const AboutScreen(),
       ),
 
       // Rutas Protegidas dentro de la Shell de Navegación

@@ -30,7 +30,19 @@ RUN flutter pub get
 
 # Copiar el resto del proyecto y compilar
 COPY . .
+
+# El archivo .env no se sube a Git. Si no existe, creamos uno vacío
+# para que la compilación no falle (la app arranca sin las claves).
+RUN [ -f .env ] || touch .env
+
+# El .env se copia con permisos 600 y nginx (usuario nginx) no puede leerlo.
+# Lo dejamos legible para que la app pueda cargar las claves.
+RUN chmod 644 .env
+
 RUN flutter build web --release
+
+# Aseguramos que nginx pueda leer todos los archivos generados.
+RUN chmod -R a+rX build/web
 
 # Etapa 2: servir los archivos estáticos con nginx
 FROM nginx:alpine
