@@ -119,6 +119,11 @@ class _HomeView extends StatelessWidget {
 
                         const SizedBox(height: 26),
 
+                        // ---------- CONSEJO DEL DÍA ----------
+                        const _DailyTipCard(),
+
+                        const SizedBox(height: 26),
+
                         // ---------- RECORDATORIOS ----------
                         const _SectionTitle(title: 'Recordatorios de hoy'),
                         const SizedBox(height: 12),
@@ -151,6 +156,88 @@ class _HomeView extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Tarjeta con un consejo de cuidado distinto cada día.
+class _DailyTipCard extends StatelessWidget {
+  const _DailyTipCard();
+
+  /// Lista de consejos. Se elige uno según el día del año.
+  static const List<String> _tips = [
+    'Riega por la mañana: las plantas absorben mejor el agua antes del calor.',
+    'Toca la tierra antes de regar. Si todavía está húmeda, espera un día más.',
+    'Gira la maceta cada semana para que la planta crezca pareja hacia la luz.',
+    'Limpia las hojas con un paño húmedo: respirarán mejor y lucirán más verdes.',
+    'No riegues de más. El exceso de agua pudre las raíces y es más común de lo que parece.',
+    'Abona en primavera y verano, cuando la planta está creciendo con más fuerza.',
+    'Retira las hojas secas para evitar hongos y dar espacio a las nuevas.',
+    'Usa macetas con agujero de drenaje: el agua sobrante debe poder salir.',
+    'Pulveriza agua en las hojas de plantas tropicales si el ambiente está muy seco.',
+    'Deja reposar el agua del grifo unas horas antes de regar, así pierde cloro.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final dayOfYear = now.difference(DateTime(now.year)).inDays;
+    final tip = _tips[dayOfYear % _tips.length];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.white.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.lightbulb_outline_rounded,
+              color: AppColors.neon,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Consejo del día',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tip,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: AppColors.white.withValues(alpha: 0.88),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

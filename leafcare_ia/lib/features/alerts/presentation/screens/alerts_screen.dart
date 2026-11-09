@@ -21,8 +21,27 @@ class AlertsScreen extends StatelessWidget {
   }
 }
 
-class _AlertsView extends StatelessWidget {
+/// Filtros disponibles en la pantalla de alertas.
+enum _AlertFilter { all, unread, read }
+
+class _AlertsView extends StatefulWidget {
   const _AlertsView();
+
+  @override
+  State<_AlertsView> createState() => _AlertsViewState();
+}
+
+class _AlertsViewState extends State<_AlertsView> {
+  final TextEditingController _searchController = TextEditingController();
+
+  _AlertFilter _filter = _AlertFilter.all;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +64,7 @@ class _AlertsView extends StatelessWidget {
           }
 
           final loaded = state as AlertsLoaded;
+          final filtered = _applyFilter(loaded.alerts);
 
           return RefreshIndicator(
             color: AppColors.primary,
@@ -63,6 +83,11 @@ class _AlertsView extends StatelessWidget {
                   child: _AlertsHeader(
                     unreadCount: loaded.unreadCount,
                     total: loaded.alerts.length,
+                    filter: _filter,
+                    searchController: _searchController,
+                    onQueryChanged: (value) => setState(() => _query = value),
+                    onFilterChanged: (value) =>
+                        setState(() => _filter = value),
                     onMarkAll: loaded.unreadCount == 0
                         ? null
                         : () => context.read<AlertsBloc>().add(
@@ -80,25 +105,49 @@ class _AlertsView extends StatelessWidget {
                           'No tienes alertas por ahora. Cuando la inteligencia artificial detecte algo en tus plantas, aparecerá aquí.',
                     ),
                   )
+                else if (filtered.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyStateView(
+                      icon: Icons.filter_alt_off_rounded,
+                      title: 'Sin alertas en este filtro',
+                      subtitle: _query.trim().isNotEmpty
+                          ? 'No encontramos alertas con esa búsqueda. Prueba con otra palabra.'
+                          : _filter == _AlertFilter.unread
+                          ? 'No tienes alertas sin leer. ¡Todo al día!'
+                          : 'Todavía no has marcado ninguna alerta como leída.',
+                    ),
+                  )
                 else
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                     sliver: SliverList.separated(
-                      itemCount: loaded.alerts.length,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final alert = loaded.alerts[index];
+                        final alert = filtered[index];
 
-                        return _AlertCard(
-                          alert: alert,
-                          onTap: () {
-                            if (!alert.isRead) {
-                              context.read<AlertsBloc>().add(
-                                MarkAlertRead(alert.id),
-                              );
-                            }
-                            _showAlertDetail(context, alert);
+                        return Dismissible(
+                          key: ValueKey('alert-${alert.id}'),
+                          direction: DismissDirection.endToStart,
+                          background: const _DeleteBackground(),
+                          confirmDismiss: (_) => _confirmDelete(alert),
+                          onDismissed: (_) {
+                            context.read<AlertsBloc>().add(
+                              DeleteAlert(alert.id),
+                            );
                           },
+                          child: _AlertCard(
+                            alert: alert,
+                            onTap: () {
+                              if (!alert.isRead) {
+                                context.read<AlertsBloc>().add(
+                                  MarkAlertRead(alert.id),
+                                );
+                              }
+                              _showAlertDetail(context, alert);
+                            },
+                          ),
                         );
                       },
                     ),
@@ -111,6 +160,64 @@ class _AlertsView extends StatelessWidget {
     );
   }
 
+  /// Devuelve solo las alertas que corresponden al filtro y a la búsqueda.
+  List<AlertModel> _applyFilter(List<AlertModel> alerts) {
+    final query = _query.trim().toLowerCase();
+
+    return alerts.where((alert) {
+      final matchesFilter = switch (_filter) {
+        _AlertFilter.all => true,
+        _AlertFilter.unread => !alert.isRead,
+        _AlertFilter.read => alert.isRead,
+      };
+
+      final matchesQuery =
+          query.isEmpty ||
+          alert.title.toLowerCase().contains(query) ||
+          alert.description.toLowerCase().contains(query) ||
+          alert.summary.toLowerCase().contains(query);
+
+      return matchesFilter && matchesQuery;
+    }).toList();
+  }
+
+  /// Pregunta antes de borrar una alerta.
+  Future<bool> _confirmDelete(AlertModel alert) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Eliminar alerta',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '¿Seguro que quieres eliminar "${alert.title}"?',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            height: 1.5,
+            color: AppColors.slate,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed == true;
+  }
+
   /// Muestra el resumen completo de la alerta en una hoja inferior.
   void _showAlertDetail(BuildContext context, AlertModel alert) {
     showModalBottomSheet<void>(
@@ -120,13 +227,13 @@ class _AlertsView extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return Padding(
           padding: EdgeInsets.fromLTRB(
             24,
             20,
             24,
-            24 + MediaQuery.paddingOf(context).bottom,
+            24 + MediaQuery.paddingOf(sheetContext).bottom,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -199,12 +306,34 @@ class _AlertsView extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Entendido'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        context.read<AlertsBloc>().add(DeleteAlert(alert.id));
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      label: const Text('Eliminar'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: const Text('Entendido'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -214,16 +343,56 @@ class _AlertsView extends StatelessWidget {
   }
 }
 
+/// Fondo rojo que aparece al deslizar una alerta para borrarla.
+class _DeleteBackground extends StatelessWidget {
+  const _DeleteBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      decoration: BoxDecoration(
+        color: AppColors.error,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Icon(Icons.delete_outline_rounded, color: AppColors.white, size: 20),
+          SizedBox(width: 6),
+          Text(
+            'Eliminar',
+            style: TextStyle(
+              color: AppColors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Encabezado de la pantalla con el contador de alertas sin leer.
 class _AlertsHeader extends StatelessWidget {
   const _AlertsHeader({
     required this.unreadCount,
     required this.total,
+    required this.filter,
+    required this.searchController,
+    required this.onFilterChanged,
+    required this.onQueryChanged,
     this.onMarkAll,
   });
 
   final int unreadCount;
   final int total;
+  final _AlertFilter filter;
+  final TextEditingController searchController;
+  final ValueChanged<_AlertFilter> onFilterChanged;
+  final ValueChanged<String> onQueryChanged;
   final VoidCallback? onMarkAll;
 
   @override
@@ -283,7 +452,100 @@ class _AlertsHeader extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 14),
+          // Filtros: todas, sin leer y leídas
+          Row(
+            children: [
+              _AlertsFilterChip(
+                label: 'Todas',
+                count: total,
+                selected: filter == _AlertFilter.all,
+                onTap: () => onFilterChanged(_AlertFilter.all),
+              ),
+              const SizedBox(width: 8),
+              _AlertsFilterChip(
+                label: 'Sin leer',
+                count: unreadCount,
+                selected: filter == _AlertFilter.unread,
+                onTap: () => onFilterChanged(_AlertFilter.unread),
+              ),
+              const SizedBox(width: 8),
+              _AlertsFilterChip(
+                label: 'Leídas',
+                count: total - unreadCount,
+                selected: filter == _AlertFilter.read,
+                onTap: () => onFilterChanged(_AlertFilter.read),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Buscador de alertas por título o descripción
+          TextField(
+            controller: searchController,
+            onChanged: onQueryChanged,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: AppColors.anthracite,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Buscar en tus alertas',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Limpiar búsqueda',
+                      onPressed: () {
+                        searchController.clear();
+                        onQueryChanged('');
+                      },
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              fillColor: AppColors.white,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botón redondeado para elegir el filtro de alertas.
+class _AlertsFilterChip extends StatelessWidget {
+  const _AlertsFilterChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.neon
+              : AppColors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          '$label · $count',
+          style: GoogleFonts.outfit(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: selected ? AppColors.primaryDark : AppColors.white,
+          ),
+        ),
       ),
     );
   }

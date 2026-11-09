@@ -17,12 +17,17 @@ class AllPlantsScreen extends StatefulWidget {
   State<AllPlantsScreen> createState() => _AllPlantsScreenState();
 }
 
+/// Orden en el que se muestran las plantas.
+enum _PlantSort { recent, name, health }
+
 class _AllPlantsScreenState extends State<AllPlantsScreen> {
   final DashboardDatasource _datasource = DashboardDatasource();
   final TextEditingController _searchController = TextEditingController();
 
   late Future<List<UserPlantModel>> _plantsFuture;
   String _query = '';
+  String? _healthFilter;
+  _PlantSort _sort = _PlantSort.recent;
 
   @override
   void initState() {
@@ -78,6 +83,7 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
 
         final all = snapshot.data!;
         final plants = _filter(all);
+        final healthLabels = _healthLabels(all);
 
         return RefreshIndicator(
           color: AppColors.primary,
@@ -121,14 +127,115 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        all.isEmpty
-                            ? 'Todavía no tienes plantas'
-                            : '${plants.length} de ${all.length} plantas',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: AppColors.slateLight,
+                      // Filtros por estado de salud
+                      if (healthLabels.isNotEmpty) ...[
+                        SizedBox(
+                          height: 34,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: healthLabels.length + 1,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              if (index == 0) {
+                                return _FilterPill(
+                                  label: 'Todas',
+                                  count: all.length,
+                                  selected: _healthFilter == null,
+                                  onTap: () =>
+                                      setState(() => _healthFilter = null),
+                                );
+                              }
+
+                              final label = healthLabels[index - 1];
+                              final count = all
+                                  .where((plant) => plant.healthLabel == label)
+                                  .length;
+
+                              return _FilterPill(
+                                label: label,
+                                count: count,
+                                selected: _healthFilter == label,
+                                onTap: () => setState(() {
+                                  _healthFilter = _healthFilter == label
+                                      ? null
+                                      : label;
+                                }),
+                              );
+                            },
+                          ),
                         ),
+                        const SizedBox(height: 12),
+                      ],
+                      Row(
+                        children: [
+                          Text(
+                            all.isEmpty
+                                ? 'Todavía no tienes plantas'
+                                : '${plants.length} de ${all.length} plantas',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppColors.slateLight,
+                            ),
+                          ),
+                          const Spacer(),
+                          // Menú para ordenar la lista
+                          PopupMenuButton<_PlantSort>(
+                            initialValue: _sort,
+                            tooltip: 'Ordenar plantas',
+                            onSelected: (value) =>
+                                setState(() => _sort = value),
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: _PlantSort.recent,
+                                child: Text('Más recientes'),
+                              ),
+                              PopupMenuItem(
+                                value: _PlantSort.name,
+                                child: Text('Nombre (A-Z)'),
+                              ),
+                              PopupMenuItem(
+                                value: _PlantSort.health,
+                                child: Text('Estado de salud'),
+                              ),
+                            ],
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.sort_rounded,
+                                    size: 15,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _sortLabel,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    size: 16,
+                                    color: AppColors.primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -147,13 +254,14 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
                   ),
                 )
               else if (plants.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: EmptyStateView(
                     icon: Icons.search_off_rounded,
                     title: 'Sin resultados',
-                    subtitle:
-                        'No encontramos plantas con ese nombre. Prueba con otra palabra.',
+                    subtitle: _healthFilter != null
+                        ? 'No hay plantas con el estado "$_healthFilter". Prueba con otro filtro.'
+                        : 'No encontramos plantas con ese nombre. Prueba con otra palabra.',
                   ),
                 )
               else
@@ -178,16 +286,119 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
     );
   }
 
-  /// Filtra por nombre propio, nombre científico o nombre común.
+  /// Filtra por nombre y por estado de salud, y luego ordena la lista.
   List<UserPlantModel> _filter(List<UserPlantModel> plants) {
     final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return plants;
 
-    return plants.where((plant) {
-      return plant.customName.toLowerCase().contains(query) ||
+    final result = plants.where((plant) {
+      final matchesQuery =
+          query.isEmpty ||
+          plant.customName.toLowerCase().contains(query) ||
           plant.scientificName.toLowerCase().contains(query) ||
           plant.commonName.toLowerCase().contains(query);
+
+      final matchesHealth =
+          _healthFilter == null || plant.healthLabel == _healthFilter;
+
+      return matchesQuery && matchesHealth;
     }).toList();
+
+    switch (_sort) {
+      case _PlantSort.recent:
+        // Ya vienen de la más nueva a la más antigua.
+        break;
+      case _PlantSort.name:
+        result.sort(
+          (a, b) =>
+              a.customName.toLowerCase().compareTo(b.customName.toLowerCase()),
+        );
+      case _PlantSort.health:
+        result.sort((a, b) {
+          final byHealth = _healthRank(
+            a.healthLabel,
+          ).compareTo(_healthRank(b.healthLabel));
+          if (byHealth != 0) return byHealth;
+          return a.customName.toLowerCase().compareTo(
+            b.customName.toLowerCase(),
+          );
+        });
+    }
+
+    return result;
+  }
+
+  /// Devuelve las etiquetas de salud que existen en las plantas.
+  List<String> _healthLabels(List<UserPlantModel> plants) {
+    final labels = <String>{};
+    for (final plant in plants) {
+      labels.add(plant.healthLabel);
+    }
+    return labels.toList();
+  }
+
+  /// Mientras más bajo el número, más urgente es el estado.
+  int _healthRank(String label) {
+    final text = label.toLowerCase();
+    if (text.contains('salud')) return 2;
+    if (text.contains('aten') ||
+        text.contains('riesgo') ||
+        text.contains('urgente')) {
+      return 1;
+    }
+    return 0;
+  }
+
+  /// Texto corto del orden elegido.
+  String get _sortLabel {
+    switch (_sort) {
+      case _PlantSort.recent:
+        return 'Recientes';
+      case _PlantSort.name:
+        return 'Nombre';
+      case _PlantSort.health:
+        return 'Estado';
+    }
+  }
+}
+
+/// Botón redondeado para filtrar las plantas por estado.
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+          ),
+        ),
+        child: Text(
+          '$label · $count',
+          style: GoogleFonts.outfit(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: selected ? AppColors.white : AppColors.slate,
+          ),
+        ),
+      ),
+    );
   }
 }
 

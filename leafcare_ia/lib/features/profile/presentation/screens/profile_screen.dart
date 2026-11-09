@@ -134,6 +134,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onTap: () => context.push('/security'),
                         ),
                         _MenuTile(
+                          icon: Icons.bar_chart_rounded,
+                          label: 'Estadísticas',
+                          subtitle: 'Resumen del cuidado de tus plantas',
+                          onTap: () => context.push('/stats'),
+                        ),
+                        _MenuTile(
+                          icon: Icons.help_outline_rounded,
+                          label: 'Ayuda y soporte',
+                          subtitle: 'Preguntas frecuentes y contacto',
+                          onTap: () => context.push('/help'),
+                        ),
+                        _MenuTile(
                           icon: Icons.info_outline_rounded,
                           label: 'Acerca de LeafCare AI',
                           subtitle: 'Versión 1.0.0',

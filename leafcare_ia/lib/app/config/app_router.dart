@@ -24,9 +24,11 @@ import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart'
 // Profile imports
 import 'package:leafcare_ia/features/profile/presentation/screens/about_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/account_screen.dart';
+import 'package:leafcare_ia/features/profile/presentation/screens/help_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/notifications_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/security_screen.dart';
+import 'package:leafcare_ia/features/profile/presentation/screens/stats_screen.dart';
 // Plant detail imports
 import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 
@@ -95,6 +97,14 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/about',
         builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) => const HelpScreen(),
+      ),
+      GoRoute(
+        path: '/stats',
+        builder: (context, state) => const StatsScreen(),
       ),
 
       // Rutas Protegidas dentro de la Shell de Navegación
