@@ -11,6 +11,8 @@ import 'package:leafcare_ia/features/auth/presentation/screens/login_screen.dart
 import 'package:leafcare_ia/features/auth/presentation/screens/register_screen.dart';
 // Dashboard imports
 import 'package:leafcare_ia/features/dashboard/presentation/screens/home_screen.dart';
+// Plant Detail imports
+import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 // Scanner imports
 import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen.dart';
 // Alerts imports
@@ -56,6 +58,13 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/plant/:id',
+        builder: (context, state) {
+          final plantId = state.pathParameters['id']!;
+          return PlantDetailScreen(plantId: plantId);
+        },
       ),
 
       // Rutas Protegidas dentro de la Shell de Navegación
