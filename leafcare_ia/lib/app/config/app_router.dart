@@ -31,8 +31,6 @@ import 'package:leafcare_ia/features/profile/presentation/screens/notifications_
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/security_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/stats_screen.dart';
-// Plant detail imports
-import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 
 import 'go_router_refresh_stream.dart';
 
@@ -79,9 +77,8 @@ GoRouter createRouter(AuthBloc authBloc) {
       // Detalle de una planta (pantalla completa con botón de regresar)
       GoRoute(
         path: '/plant/:id',
-        builder: (context, state) => PlantDetailScreen(
-          plantId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) =>
+            PlantDetailScreen(plantId: state.pathParameters['id']!),
       ),
 
       // Lista completa de plantas
@@ -103,18 +100,9 @@ GoRouter createRouter(AuthBloc authBloc) {
         path: '/security',
         builder: (context, state) => const SecurityScreen(),
       ),
-      GoRoute(
-        path: '/about',
-        builder: (context, state) => const AboutScreen(),
-      ),
-      GoRoute(
-        path: '/help',
-        builder: (context, state) => const HelpScreen(),
-      ),
-      GoRoute(
-        path: '/stats',
-        builder: (context, state) => const StatsScreen(),
-      ),
+      GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
+      GoRoute(path: '/help', builder: (context, state) => const HelpScreen()),
+      GoRoute(path: '/stats', builder: (context, state) => const StatsScreen()),
 
       // Rutas Protegidas dentro de la Shell de Navegación
       StatefulShellRoute.indexedStack(
