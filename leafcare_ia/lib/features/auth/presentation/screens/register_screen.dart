@@ -66,6 +66,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordController.text;
     final confirm = _confirmPasswordController.text;
 
+    if (!email.contains('@') || !email.contains('.')) {
+      _snack('Ingresa un correo electrónico válido', error: true);
+      return;
+    }
+
     if (name.isEmpty || email.isEmpty || password.isEmpty || confirm.isEmpty) {
       _snack('Por favor completa todos los campos', error: true);
       return;
@@ -241,8 +246,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     // BOTÓN CREAR CUENTA
                     BlocConsumer<AuthBloc, AuthState>(
                       listener: (context, state) {
-                        if (state is AuthenticatedState)
+                        if (state is EmailVerificationPendingState) {
+                          context.go('/verify-email', extra: state.email);
+                        } else if (state is AuthenticatedState) {
                           context.go('/dashboard');
+                        } else if (state is AuthErrorState) {
+                          _snack(state.message, error: true);
+                        }
                       },
                       builder: (context, state) {
                         final isButtonActive =
@@ -263,7 +273,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     AuthFooter(
                       questionText: '¿Ya tienes cuenta? ',
                       actionText: 'Inicia sesión',
-                      onTap: () => context.pop(),
+                      onTap: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go('/login');
+                        }
+                      },
                     ),
                   ],
                 ),

@@ -134,7 +134,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: GestureDetector(
-                        onTap: () => _comingSoon('Recuperar contraseña'),
+                        onTap: () => context.push(
+                          '/forgot-password',
+                          extra: _emailController.text.trim(),
+                        ),
                         child: Text(
                           '¿Olvidaste tu contraseña?',
                           style: GoogleFonts.outfit(
@@ -154,6 +157,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           context.go('/dashboard');
                         } else if (state is AuthErrorState) {
                           _snack(state.message, error: true);
+                          if (state.isEmailNotConfirmed &&
+                              state.email != null) {
+                            context.push('/verify-email', extra: state.email!);
+                          }
                         }
                       },
                       builder: (context, state) {

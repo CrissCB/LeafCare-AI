@@ -9,7 +9,7 @@ Future<void> main() async {
 
   // Carga las claves del archivo .env
   try {
-    await dotenv.load(fileName: ".env");
+    await dotenv.load(fileName: '.env');
   } catch (_) {
     dotenv.loadFromString(envString: '');
   }
@@ -17,11 +17,14 @@ Future<void> main() async {
   final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
   final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-  // Inicializa Supabase
+  // Inicializa Supabase con flujo PKCE para verificación de correo y recovery
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
     await Supabase.initialize(
       url: supabaseUrl,
       publishableKey: supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
     );
   } else {
     debugPrint(
@@ -31,5 +34,3 @@ Future<void> main() async {
 
   runApp(const LeafCareApp());
 }
-
-final supabase = Supabase.instance.client;

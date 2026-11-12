@@ -1,16 +1,26 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
-import 'package:leafcare_ia/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:leafcare_ia/features/auth/data/repositories/auth_repository.dart';
 
 // --- EVENTOS ---
 abstract class AuthEvent {}
 
 class CheckAuthStatusEvent extends AuthEvent {}
 
+class _AuthSessionChangedEvent extends AuthEvent {
+  final sb.AuthChangeEvent event;
+  final sb.Session? session;
+  _AuthSessionChangedEvent(this.event, this.session);
+}
+
+class PasswordRecoveryState extends AuthState {}
+
 class LoginSubmittedEvent extends AuthEvent {
   final String email;
   final String password;
+
   LoginSubmittedEvent({required this.email, required this.password});
 }
 
@@ -28,6 +38,26 @@ class RegisterSubmittedEvent extends AuthEvent {
   });
 }
 
+class ResendVerificationEmailEvent extends AuthEvent {
+  final String email;
+
+  ResendVerificationEmailEvent({required this.email});
+}
+
+class ForgotPasswordRequestedEvent extends AuthEvent {
+  final String email;
+  ForgotPasswordRequestedEvent({required this.email});
+}
+
+class UpdatePasswordSubmittedEvent extends AuthEvent {
+  final String newPassword;
+  final String confirmPassword;
+  UpdatePasswordSubmittedEvent({
+    required this.newPassword,
+    required this.confirmPassword,
+  });
+}
+
 class LogoutRequestedEvent extends AuthEvent {}
 
 // --- ESTADOS ---
@@ -41,31 +71,83 @@ class AuthenticatedState extends AuthState {}
 
 class UnauthenticatedState extends AuthState {}
 
+/// El usuario se registró, pero debe abrir el enlace enviado a su correo.
+class EmailVerificationPendingState extends AuthState {
+  final String email;
+  final String message;
+
+  EmailVerificationPendingState({
+    required this.email,
+    this.message = 'Te enviamos un enlace de confirmación a tu correo. Ábrelo para activar tu cuenta.',
+  });
+}
+
+class PasswordResetSentState extends AuthState {
+  final String email;
+  final String message;
+  PasswordResetSentState({required this.email, required this.message});
+}
+
+class PasswordUpdatedState extends AuthState {}
+
 class AuthErrorState extends AuthState {
   final String message;
-  AuthErrorState(this.message);
+  final bool isEmailNotConfirmed;
+  final String? email;
+
+  AuthErrorState(this.message, {this.isEmailNotConfirmed = false, this.email});
 }
 
 // --- BLOC ---
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final AuthRemoteDatasource datasource;
+  late final StreamSubscription<sb.AuthState> _authSubscription;
+  final AuthRepository repository;
 
-  AuthBloc({required this.datasource}) : super(AuthInitialState()) {
+  AuthBloc({required this.repository}) : super(AuthInitialState()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginSubmittedEvent>(_onLoginSubmitted);
     on<RegisterSubmittedEvent>(_onRegisterSubmitted);
+    on<ResendVerificationEmailEvent>(_onResendVerification);
+    on<ForgotPasswordRequestedEvent>(_onForgotPassword);
+    on<UpdatePasswordSubmittedEvent>(_onUpdatePassword);
     on<LogoutRequestedEvent>(_onLogoutRequested);
+    on<_AuthSessionChangedEvent>(_onAuthSessionChanged);
+
+    _authSubscription = sb.Supabase.instance.client.auth.onAuthStateChange
+        .listen((data) {
+          add(_AuthSessionChangedEvent(data.event, data.session));
+        });
   }
 
   Future<void> _onCheckAuthStatus(
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
+    if (state is PasswordRecoveryState) return;
+
     emit(AuthLoadingState());
-    final hasSession = await datasource.checkSession();
+    final hasSession = await repository.checkSession();
+
+    if (state is PasswordRecoveryState) return;
+
     if (hasSession) {
       emit(AuthenticatedState());
     } else {
+      emit(UnauthenticatedState());
+    }
+  }
+
+  void _onAuthSessionChanged(
+    _AuthSessionChangedEvent event,
+    Emitter<AuthState> emit,
+  ) {
+    if (event.event == sb.AuthChangeEvent.passwordRecovery) {
+      emit(PasswordRecoveryState());
+    } else if (event.event == sb.AuthChangeEvent.signedIn &&
+        event.session != null &&
+        state is! PasswordRecoveryState) {
+      emit(AuthenticatedState());
+    } else if (event.event == sb.AuthChangeEvent.signedOut) {
       emit(UnauthenticatedState());
     }
   }
@@ -76,10 +158,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoadingState());
     try {
-      await datasource.login(event.email, event.password);
-      emit(AuthenticatedState());
-    } on AuthException catch (e) {
-      emit(AuthErrorState(_friendlyError(e)));
+      final result = await repository.login(
+        email: event.email,
+        password: event.password,
+      );
+
+      if (result.requiresEmailVerification) {
+        emit(EmailVerificationPendingState(email: result.email));
+      } else {
+        emit(AuthenticatedState());
+      }
+    } on AuthFailureException catch (e) {
+      emit(
+        AuthErrorState(
+          e.message,
+          isEmailNotConfirmed: e.isEmailNotConfirmed,
+          email: event.email.trim(),
+        ),
+      );
     } catch (_) {
       emit(AuthErrorState('No se pudo conectar con el servidor.'));
     }
@@ -91,17 +187,94 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoadingState());
     try {
-      await datasource.register(
+      final result = await repository.register(
         name: event.name,
         email: event.email,
         password: event.password,
         passwordConfirm: event.passwordConfirm,
       );
-      emit(AuthenticatedState());
-    } on AuthException catch (e) {
-      emit(AuthErrorState(_friendlyError(e)));
+
+      if (result.requiresEmailVerification) {
+        emit(EmailVerificationPendingState(email: result.email));
+      } else {
+        emit(AuthenticatedState());
+      }
+    } on AuthFailureException catch (e) {
+      emit(AuthErrorState(e.message));
     } catch (_) {
       emit(AuthErrorState('Error al crear la cuenta. Inténtalo de nuevo.'));
+    }
+  }
+
+  Future<void> _onResendVerification(
+    ResendVerificationEmailEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await repository.resendVerificationEmail(event.email);
+      emit(
+        EmailVerificationPendingState(
+          email: event.email,
+          message:
+              'Hemos reenviado el enlace de verificación a ${event.email}.',
+        ),
+      );
+    } on AuthFailureException catch (e) {
+      emit(
+        AuthErrorState(
+          e.message,
+          isEmailNotConfirmed: true,
+          email: event.email,
+        ),
+      );
+    } catch (_) {
+      emit(AuthErrorState('No se pudo reenviar el correo de verificación.'));
+    }
+  }
+
+  Future<void> _onForgotPassword(
+    ForgotPasswordRequestedEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await repository.resetPassword(event.email);
+      emit(
+        PasswordResetSentState(
+          email: event.email.trim(),
+          message:
+              'Enviamos un enlace de recuperación a ${event.email.trim()}.',
+        ),
+      );
+    } on AuthFailureException catch (e) {
+      emit(AuthErrorState(e.message));
+    } catch (_) {
+      emit(AuthErrorState('No se pudo enviar el correo de recuperación.'));
+    }
+  }
+
+  Future<void> _onUpdatePassword(
+    UpdatePasswordSubmittedEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (event.newPassword != event.confirmPassword) {
+      emit(AuthErrorState('Las contraseñas no coinciden.'));
+      return;
+    }
+    if (event.newPassword.length < 6) {
+      emit(AuthErrorState('La contraseña debe tener al menos 6 caracteres.'));
+      return;
+    }
+
+    emit(AuthLoadingState());
+    try {
+      await repository.updatePassword(event.newPassword);
+      emit(PasswordUpdatedState());
+    } on AuthFailureException catch (e) {
+      emit(AuthErrorState(e.message));
+    } catch (_) {
+      emit(AuthErrorState('No se pudo actualizar la contraseña.'));
     }
   }
 
@@ -109,28 +282,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LogoutRequestedEvent event,
     Emitter<AuthState> emit,
   ) async {
-    await datasource.logout();
+    await repository.logout();
     emit(UnauthenticatedState());
   }
 
-  /// Traduce las excepciones típicas de Supabase GoTrue a mensajes legibles
-  String _friendlyError(AuthException e) {
-    final message = e.message.toLowerCase();
-
-    if (message.contains('invalid login credentials')) {
-      return 'Correo o contraseña incorrectos.';
-    }
-    if (message.contains('user already registered') ||
-        message.contains('already exists')) {
-      return 'El correo electrónico ya está registrado.';
-    }
-    if (message.contains('password should be at least')) {
-      return 'La contraseña debe tener al menos 6 caracteres.';
-    }
-    if (message.contains('rate limit exceeded')) {
-      return 'Demasiados intentos. Inténtalo de nuevo en unos minutos.';
-    }
-
-    return e.message;
+  @override
+  Future<void> close() {
+    _authSubscription.cancel();
+    return super.close();
   }
 }

@@ -9,8 +9,11 @@ import 'package:leafcare_ia/core/widgets/main_shell.dart';
 
 // Auth imports
 import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:leafcare_ia/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/login_screen.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/register_screen.dart';
+import 'package:leafcare_ia/features/auth/presentation/screens/reset_password_screen.dart';
+import 'package:leafcare_ia/features/auth/presentation/screens/verify_email_screen.dart';
 // Dashboard imports
 import 'package:leafcare_ia/features/dashboard/presentation/screens/all_plants_screen.dart';
 import 'package:leafcare_ia/features/dashboard/presentation/screens/home_screen.dart';
@@ -37,43 +40,71 @@ import 'package:leafcare_ia/features/profile/presentation/screens/stats_screen.d
 import 'go_router_refresh_stream.dart';
 
 GoRouter createRouter(AuthBloc authBloc) {
+  const publicAuthRoutes = {
+    '/login',
+    '/register',
+    '/verify-email',
+    '/forgot-password',
+  };
+
   return GoRouter(
     initialLocation: '/dashboard',
     refreshListenable: GoRouterRefreshStream(authBloc.stream),
     redirect: (BuildContext context, GoRouterState state) {
       final authState = authBloc.state;
-      final isLoggingIn =
-          state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register';
+      final location = state.matchedLocation;
 
       if (authState is AuthInitialState || authState is AuthLoadingState) {
         return null;
       }
 
+      // Si el usuario abrió un enlace de recuperación de contraseña desde su correo
+      if (authState is PasswordRecoveryState) {
+        return location == '/reset-password' ? null : '/reset-password';
+      }
+
+      // Permitir permanecer en /reset-password mientras guarda la nueva clave
+      if (location == '/reset-password') {
+        return null;
+      }
+
+      final isPublicRoute = publicAuthRoutes.contains(location);
       final isAuthenticated = authState is AuthenticatedState;
 
-      if (!isAuthenticated && !isLoggingIn) {
+      if (!isAuthenticated && !isPublicRoute) {
         return '/login';
       }
 
-      if (isAuthenticated && isLoggingIn) {
+      if (isAuthenticated && isPublicRoute) {
         return '/dashboard';
       }
 
       return null;
     },
     routes: [
+      // Rutas públicas de Autenticación
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
-        path: '/plant/:id',
+        path: '/verify-email',
         builder: (context, state) {
-          final plantId = state.pathParameters['id']!;
-          return PlantDetailScreen(plantId: plantId);
+          final email = state.extra as String? ?? '';
+          return VerifyEmailScreen(email: email);
         },
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) {
+          final email = state.extra as String? ?? '';
+          return ForgotPasswordScreen(initialEmail: email);
+        },
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
 
       // Detalle de una planta (pantalla completa con botón de regresar)
