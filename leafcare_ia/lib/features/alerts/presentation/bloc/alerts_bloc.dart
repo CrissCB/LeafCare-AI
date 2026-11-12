@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:leafcare_ia/core/network/supabase_client.dart';
+
 import 'package:leafcare_ia/features/alerts/data/datasources/alerts_datasource.dart';
 import 'package:leafcare_ia/features/alerts/data/models/alert_model.dart';
 
@@ -63,7 +65,9 @@ class AlertsError extends AlertsState {
 /// Controla el estado de la pantalla de alertas.
 class AlertsBloc extends Bloc<AlertsEvent, AlertsState> {
   AlertsBloc({AlertsDatasource? datasource})
-    : _datasource = datasource ?? AlertsDatasource(),
+    : _datasource =
+          datasource ??
+          AlertsDatasource(supabaseClient: const AppSupabaseClient()),
       super(const AlertsInitial()) {
     on<LoadAlerts>(_onLoad);
     on<RefreshAlerts>(_onLoad);

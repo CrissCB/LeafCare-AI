@@ -5,6 +5,7 @@ import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
 import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/profile/data/datasources/stats_datasource.dart';
 import 'package:leafcare_ia/features/profile/data/models/stats_model.dart';
 
@@ -17,7 +18,9 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  final StatsDatasource _datasource = StatsDatasource();
+  final StatsDatasource _datasource = StatsDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
   late Future<StatsModel> _future;
 
   @override
@@ -208,10 +211,7 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: AppColors.slateLight,
-            ),
+            style: GoogleFonts.inter(fontSize: 11, color: AppColors.slateLight),
           ),
         ],
       ),
@@ -414,10 +414,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            color: AppColors.slate,
-          ),
+          style: GoogleFonts.inter(fontSize: 11, color: AppColors.slate),
         ),
       ],
     );

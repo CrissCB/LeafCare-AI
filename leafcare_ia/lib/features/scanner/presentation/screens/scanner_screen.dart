@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:leafcare_ia/core/network/supabase_client.dart';
+
 import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/features/scanner/data/datasources/plantnet_datasource.dart';
 import 'package:leafcare_ia/features/scanner/data/datasources/scanner_datasource.dart';
@@ -20,7 +22,9 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen> {
   final ImagePicker _picker = ImagePicker();
   final PlantNetDatasource _plantNet = PlantNetDatasource();
-  final ScannerDatasource _saver = ScannerDatasource();
+  final ScannerDatasource _saver = ScannerDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
   final TextEditingController _nameController = TextEditingController();
 
   Uint8List? _imageBytes;
@@ -305,9 +309,7 @@ class _ScanScreenState extends State<ScanScreen> {
             decoration: BoxDecoration(
               color: AppColors.error.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.error.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -346,10 +348,7 @@ class _ScanScreenState extends State<ScanScreen> {
           const SizedBox(height: 4),
           Text(
             'Toca la opción correcta. La IA puede equivocarse.',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: AppColors.slate,
-            ),
+            style: GoogleFonts.inter(fontSize: 11, color: AppColors.slate),
           ),
           const SizedBox(height: 12),
           for (var index = 0; index < _results.length; index++)

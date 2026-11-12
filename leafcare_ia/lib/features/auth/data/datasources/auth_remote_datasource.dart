@@ -1,80 +1,64 @@
-import 'package:pocketbase/pocketbase.dart';
-
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 
 class AuthRemoteDatasource {
+  const AuthRemoteDatasource({required this.supabaseClient});
+
+  final AppSupabaseClient supabaseClient;
+
+  SupabaseClient get _client => supabaseClient.client;
+
   /// Iniciar sesión con correo y contraseña
-  Future<RecordAuth> login(String email, String password) async {
-    final pb = await PocketBaseClient.getInstance();
-    return await pb.collection('users').authWithPassword(email, password);
+  Future<AuthResponse> login(String email, String password) async {
+    return await _client.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
+    );
   }
 
   /// Registro de usuario + inicialización de user_security
-  Future<RecordAuth> register({
+  Future<AuthResponse> register({
     required String name,
     required String email,
     required String password,
     required String passwordConfirm,
   }) async {
-    final pb = await PocketBaseClient.getInstance();
+    final authResponse = await _client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      data: {'name': name.trim(), 'auth_provider': 'NATIVE'},
+    );
 
-    // 1. Crear el usuario en la colección 'users'
-    final userRecord = await pb
-        .collection('users')
-        .create(
-          body: {
-            'name': name,
-            'email': email,
-            'password': password,
-            'passwordConfirm': passwordConfirm,
-            'emailVisibility': true,
-            'auth_provider': 'NATIVE',
-            'push_notifications_enabled': true,
-            'daily_email_summary': false,
-            'weekly_email_summary': true,
-          },
-        );
+    final userId = authResponse.user?.id;
 
-    // 2. Iniciar sesión automáticamente tras el registro
-    final authData = await pb
-        .collection('users')
-        .authWithPassword(email, password);
+    if (userId != null) {
+      try {
+        await _client.from('user_security').insert({
+          'user_id': userId,
+          'is_2fa_enabled': false,
+          'failed_login_attempts': 0,
+        });
+      } catch (_) {}
+    }
 
-    // 3. Crear el registro en 'user_security' vinculado al usuario creado
-    try {
-      await pb
-          .collection('user_security')
-          .create(
-            body: {
-              'user_id': userRecord.id,
-              'is_2fa_enabled': false,
-              'failed_login_attempts': 0,
-              'last_login': DateTime.now().toIso8601String(),
-            },
-          );
-    } catch (_) {}
-
-    return authData;
+    return authResponse;
   }
 
   /// Verificar si existe una sesión válida guardada en el dispositivo
   Future<bool> checkSession() async {
-    final pb = await PocketBaseClient.getInstance();
-    if (!pb.authStore.isValid) return false;
+    final session = _client.auth.currentSession;
+    if (session == null || session.isExpired) return false;
 
     try {
-      // Revalida el token contra el servidor PocketBase
-      await pb.collection('users').authRefresh();
-      return true;
+      final response = await _client.auth.getUser();
+      return response.user != null;
     } catch (_) {
-      pb.authStore.clear();
+      await logout();
       return false;
     }
   }
 
-  /// Cerrar sesión
+  /// Cerrar sesión y limpiar tokens locales
   Future<void> logout() async {
-    final pb = await PocketBaseClient.getInstance();
-    pb.authStore.clear();
+    await _client.auth.signOut();
   }
 }

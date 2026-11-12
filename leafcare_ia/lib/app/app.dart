@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:leafcare_ia/app/config/app_router.dart';
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 
 import 'package:leafcare_ia/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
@@ -21,8 +22,11 @@ class _LeafCareAppState extends State<LeafCareApp> {
   @override
   void initState() {
     super.initState();
-    _authBloc = AuthBloc(datasource: AuthRemoteDatasource())
-      ..add(CheckAuthStatusEvent());
+    _authBloc = AuthBloc(
+      datasource: AuthRemoteDatasource(
+        supabaseClient: const AppSupabaseClient(),
+      ),
+    )..add(CheckAuthStatusEvent());
     _router = createRouter(_authBloc);
   }
 

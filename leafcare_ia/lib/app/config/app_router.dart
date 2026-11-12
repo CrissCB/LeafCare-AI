@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:leafcare_ia/core/network/supabase_client.dart';
+
 // Main Shell import
 import 'package:leafcare_ia/core/widgets/main_shell.dart';
 
@@ -142,6 +144,7 @@ GoRouter createRouter(AuthBloc authBloc) {
                   create: (_) => BlogBloc(
                     repository: BlogRepository(
                       rssDatasource: RssBlogDatasource(),
+                      supabaseClient: const AppSupabaseClient(),
                     ),
                   )..add(BlogStarted()),
                   child: const BlogScreen(),

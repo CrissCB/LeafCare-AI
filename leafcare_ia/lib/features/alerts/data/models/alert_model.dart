@@ -1,8 +1,6 @@
-import 'package:pocketbase/pocketbase.dart';
-
 /// Representa una alerta generada por la inteligencia artificial.
 ///
-/// Se construye a partir de un registro de la colección `ia_alerts`.
+/// Se construye a partir de una fila de la tabla `ia_alerts` en Supabase.
 class AlertModel {
   const AlertModel({
     required this.id,
@@ -22,21 +20,33 @@ class AlertModel {
   final bool isRead;
   final DateTime created;
 
-  /// Convierte un registro de PocketBase en un objeto de la aplicación.
-  factory AlertModel.fromRecord(RecordModel record) {
-    final data = record.data;
+  /// Convierte el mapa JSON de Supabase/PostgreSQL en un objeto de la aplicación.
+  factory AlertModel.fromJson(Map<String, dynamic> json) {
+    final createdRaw =
+        json['created_at']?.toString() ?? json['created']?.toString() ?? '';
 
     return AlertModel(
-      id: record.id,
-      title: _text(data['issue_title'], 'Alerta de tu planta'),
-      description: _text(data['short_description'], ''),
-      summary: _text(data['full_summary_ia'], ''),
-      statusColorHex: _text(data['status_color'], '#DC2626'),
-      isRead: data['is_read'] == true,
-      created:
-          DateTime.tryParse(record.get<String>('created'))?.toLocal() ??
-          DateTime.now(),
+      id: json['id']?.toString() ?? '',
+      title: _text(json['issue_title'], 'Alerta de tu planta'),
+      description: _text(json['short_description'], ''),
+      summary: _text(json['full_summary_ia'], ''),
+      statusColorHex: _text(json['status_color'], '#DC2626'),
+      isRead: json['is_read'] == true,
+      created: DateTime.tryParse(createdRaw)?.toLocal() ?? DateTime.now(),
     );
+  }
+
+  /// Convierte la instancia a JSON para operaciones en base de datos.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'issue_title': title,
+      'short_description': description,
+      'full_summary_ia': summary,
+      'status_color': statusColorHex,
+      'is_read': isRead,
+      'created_at': created.toIso8601String(),
+    };
   }
 
   static String _text(Object? value, String fallback) {

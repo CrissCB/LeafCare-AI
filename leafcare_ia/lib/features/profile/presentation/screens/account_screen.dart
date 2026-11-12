@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pocketbase/pocketbase.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
 import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
@@ -18,7 +18,9 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  final AccountDatasource _datasource = AccountDatasource();
+  final AccountDatasource _datasource = AccountDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
   final TextEditingController _nameController = TextEditingController();
 
   late Future<AccountModel> _accountFuture;
@@ -191,10 +193,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                           color: AppColors.white,
                                         ),
                                       )
-                                    : const Icon(
-                                        Icons.save_rounded,
-                                        size: 18,
-                                      ),
+                                    : const Icon(Icons.save_rounded, size: 18),
                                 label: Text(
                                   _savingName
                                       ? 'Guardando...'
@@ -521,13 +520,12 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } on ClientException catch (error) {
-      final raw = error.response['message']?.toString() ?? '';
+    } on AuthException catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = raw.isNotEmpty
-            ? 'No se pudo cambiar: $raw'
-            : 'La contraseña actual no es correcta.';
+        _error = error.message.isNotEmpty
+            ? 'No se pudo cambiar: ${error.message}'
+            : 'La contraseña actual no es correcta o expiró la sesión.';
       });
     } catch (_) {
       if (!mounted) return;

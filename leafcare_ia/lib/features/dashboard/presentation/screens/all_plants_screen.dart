@@ -6,6 +6,7 @@ import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
 import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/dashboard/data/datasources/dashboard_datasource.dart';
 import 'package:leafcare_ia/features/dashboard/data/models/user_plant_model.dart';
 
@@ -21,7 +22,9 @@ class AllPlantsScreen extends StatefulWidget {
 enum _PlantSort { recent, name, health }
 
 class _AllPlantsScreenState extends State<AllPlantsScreen> {
-  final DashboardDatasource _datasource = DashboardDatasource();
+  final DashboardDatasource _datasource = DashboardDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
   final TextEditingController _searchController = TextEditingController();
 
   late Future<List<UserPlantModel>> _plantsFuture;
@@ -103,8 +106,7 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
                       // Buscador
                       TextField(
                         controller: _searchController,
-                        onChanged: (value) =>
-                            setState(() => _query = value),
+                        onChanged: (value) => setState(() => _query = value),
                         decoration: InputDecoration(
                           hintText: 'Buscar por nombre',
                           prefixIcon: const Icon(
@@ -314,9 +316,8 @@ class _AllPlantsScreenState extends State<AllPlantsScreen> {
         );
       case _PlantSort.health:
         result.sort((a, b) {
-          final byHealth = _healthRank(
-            a.healthLabel,
-          ).compareTo(_healthRank(b.healthLabel));
+          final byHealth = _healthRank(a.healthLabel)
+              .compareTo(_healthRank(b.healthLabel));
           if (byHealth != 0) return byHealth;
           return a.customName.toLowerCase().compareTo(
             b.customName.toLowerCase(),

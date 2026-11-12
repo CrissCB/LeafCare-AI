@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/plant_detail/data/datasources/plant_remote_datasource.dart';
 import 'package:leafcare_ia/features/plant_detail/data/models/plant_detail_model.dart';
 import 'package:leafcare_ia/features/plant_detail/data/repositories/plant_repository.dart';
@@ -18,8 +19,9 @@ class EditPlantDialog extends StatefulWidget {
 
 class _EditPlantDialogState extends State<EditPlantDialog> {
   late final TextEditingController _nameController;
+
   final _repository = const PlantRepository(
-    datasource: PlantRemoteDatasource(),
+    datasource: PlantRemoteDatasource(supabaseClient: AppSupabaseClient()),
   );
 
   String? _selectedGroupId;

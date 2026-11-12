@@ -1,6 +1,4 @@
-import 'package:pocketbase/pocketbase.dart';
-
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/blog/data/datasources/rss_blog_datasource.dart';
 import 'package:leafcare_ia/features/blog/data/models/article_model.dart';
 
@@ -9,12 +7,16 @@ class BlogAuthRequiredException implements Exception {
 }
 
 class BlogRepository {
-  BlogRepository({required this.rssDatasource});
+  BlogRepository({required this.rssDatasource, required this.supabaseClient});
 
   final RssBlogDatasource rssDatasource;
+  final AppSupabaseClient supabaseClient;
 
-  static const _collection = 'saved_blog_articles';
+  static const _table = 'saved_blog_articles';
 
+  SupabaseClient get _client => supabaseClient.client;
+
+  /// Obtiene los artículos del RSS y los cruza con los guardados en PostgreSQL
   Future<List<ArticleModel>> fetchArticles() async {
     final articles = await rssDatasource.fetchArticles();
     final savedIds = await _savedExternalIds();
@@ -27,60 +29,59 @@ class BlogRepository {
         .toList(growable: false);
   }
 
+  /// Alterna el estado de guardado (Insertar o Eliminar registro)
   Future<ArticleModel> toggleSave(ArticleModel article) async {
-    final pb = await PocketBaseClient.getInstance();
-    final userId = pb.authStore.record?.id;
-    if (!pb.authStore.isValid || userId == null) {
+    final userId = supabaseClient.currentUserId;
+    if (!supabaseClient.isAuthenticated || userId == null) {
       throw const BlogAuthRequiredException();
     }
 
     if (article.saved) {
-      final existing = await pb
-          .collection(_collection)
-          .getFirstListItem(
-            'external_article_id = "${_escape(article.id)}" && user_id = "$userId"',
-          );
-      await pb.collection(_collection).delete(existing.id);
+      // Eliminar artículo de marcadores
+      await _client
+          .from(_table)
+          .delete()
+          .eq('external_article_id', article.id)
+          .eq('user_id', userId);
+
       return article.copyWith(saved: false);
     }
 
-    await pb
-        .collection(_collection)
-        .create(
-          body: {
-            'external_article_id': article.id,
-            'title': article.title,
-            'author': article.author,
-            'category': article.category,
-            'image_url': article.imageUrl,
-            'read_time': article.readTime,
-            'user_id': userId,
-          },
-        );
+    // Insertar artículo en marcadores
+    await _client.from(_table).insert({
+      'external_article_id': article.id,
+      'title': article.title,
+      'author': article.author,
+      'category': article.category,
+      'image_url': article.imageUrl,
+      'read_time': article.readTime,
+      'user_id': userId,
+    });
+
     return article.copyWith(saved: true);
   }
 
+  /// Consulta los IDs de los artículos guardados por el usuario
   Future<Set<String>> _savedExternalIds() async {
     try {
-      final pb = await PocketBaseClient.getInstance();
-      final userId = pb.authStore.record?.id;
-      if (!pb.authStore.isValid || userId == null) return const {};
+      final userId = supabaseClient.currentUserId;
+      if (!supabaseClient.isAuthenticated || userId == null) return const {};
 
-      final records = await pb
-          .collection(_collection)
-          .getFullList(filter: 'user_id = "$userId"');
+      final response = await _client
+          .from(_table)
+          .select('external_article_id')
+          .eq('user_id', userId);
 
-      return records
-          .map((record) => record.get<String>('external_article_id', ''))
+      final List<dynamic> data = response as List<dynamic>;
+
+      return data
+          .map((row) => row['external_article_id'] as String? ?? '')
           .where((id) => id.isNotEmpty)
           .toSet();
-    } on ClientException {
+    } on PostgrestException {
       return const {};
     } catch (_) {
       return const {};
     }
   }
-
-  String _escape(String value) =>
-      value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }

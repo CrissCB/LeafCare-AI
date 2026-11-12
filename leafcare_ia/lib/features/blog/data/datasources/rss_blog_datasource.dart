@@ -1,63 +1,70 @@
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart' as xml;
+
 import 'package:leafcare_ia/core/constants/api_constants.dart';
-import 'package:leafcare_ia/core/network/http_client.dart';
 import 'package:leafcare_ia/features/blog/data/models/article_model.dart';
 
 class RssBlogDatasource {
-  RssBlogDatasource({AppHttpClient? httpClient})
-    : _httpClient = httpClient ?? const AppHttpClient();
-
-  final AppHttpClient _httpClient;
+  RssBlogDatasource();
 
   Future<List<ArticleModel>> fetchArticles() async {
-    final uri = Uri.parse(
-      '${ApiConstants.rssToJasonUrl}${Uri.encodeComponent(ApiConstants.gardeningRssUrl)}',
-    );
+    try {
+      final url = kIsWeb
+          ? ApiConstants.webGardeningRssProxy
+          : ApiConstants.gardeningRssUrl;
 
-    final json = await _httpClient.getJson(uri);
-    if (json['status'] != 'ok') {
-      throw Exception('No se pudieron cargar los artículos');
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        return const [];
+      }
+
+      final document = xml.XmlDocument.parse(response.body);
+      final items = document.findAllElements('item');
+
+      return items.map(_fromXmlItem).toList(growable: false);
+    } catch (e) {
+      return const [];
     }
-
-    final items = json['items'];
-    if (items is! List) return const [];
-
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(_fromRssItem)
-        .toList(growable: false);
   }
 
-  ArticleModel _fromRssItem(Map<String, dynamic> item) {
-    final content = (item['content'] as String?) ?? '';
-    final description = (item['description'] as String?) ?? '';
-    final categories = item['categories'];
-    final category = categories is List && categories.isNotEmpty
-        ? '${categories.first}'
-        : 'Jardinería';
+  ArticleModel _fromXmlItem(xml.XmlElement node) {
+    final title =
+        node.findElements('title').firstOrNull?.innerText ?? 'Sin título';
+    final link = node.findElements('link').firstOrNull?.innerText ?? '';
+    final guid = node.findElements('guid').firstOrNull?.innerText ?? link;
+    final author =
+        node.findElements('dc:creator').firstOrNull?.innerText ?? 'Redacción';
+    final category =
+        node.findElements('category').firstOrNull?.innerText ?? 'Jardinería';
+    final descriptionRaw =
+        node.findElements('description').firstOrNull?.innerText ?? '';
+    final contentEncoded =
+        node.findElements('content:encoded').firstOrNull?.innerText ?? '';
 
-    String imageUrl = (item['thumbnail'] as String?)?.trim() ?? '';
+    String imageUrl =
+        _extractImageUrl(contentEncoded) ??
+        _extractImageUrl(descriptionRaw) ??
+        '';
 
-    if (imageUrl.isEmpty) {
-      imageUrl =
-          _extractImageUrl(content) ?? _extractImageUrl(description) ?? '';
-    }
-
-    final cleanDescription = description
+    final cleanDescription = descriptionRaw
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     return ArticleModel(
-      id: (item['guid'] as String?)?.trim().isNotEmpty == true
-          ? item['guid'] as String
-          : (item['link'] as String? ?? ''),
-      title: (item['title'] as String?)?.trim() ?? 'Sin título',
-      author: (item['author'] as String?)?.trim().isNotEmpty == true
-          ? item['author'] as String
-          : 'Redacción',
-      category: category,
-      imageUrl: imageUrl,
-      readTime: _readTimeFrom(content),
-      link: (item['link'] as String?) ?? '',
+      id: guid.trim().isNotEmpty ? guid.trim() : link.trim(),
+      title: title.trim(),
+      author: author.trim(),
+      category: category.trim(),
+      imageUrl: imageUrl.trim(),
+      readTime: _readTimeFrom(
+        contentEncoded.isNotEmpty ? contentEncoded : descriptionRaw,
+      ),
+      link: link.trim(),
       description: cleanDescription,
     );
   }

@@ -1,5 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pocketbase/pocketbase.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:leafcare_ia/features/auth/data/datasources/auth_remote_datasource.dart';
 
@@ -78,7 +78,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       await datasource.login(event.email, event.password);
       emit(AuthenticatedState());
-    } on ClientException catch (e) {
+    } on AuthException catch (e) {
       emit(AuthErrorState(_friendlyError(e)));
     } catch (_) {
       emit(AuthErrorState('No se pudo conectar con el servidor.'));
@@ -98,7 +98,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         passwordConfirm: event.passwordConfirm,
       );
       emit(AuthenticatedState());
-    } on ClientException catch (e) {
+    } on AuthException catch (e) {
       emit(AuthErrorState(_friendlyError(e)));
     } catch (_) {
       emit(AuthErrorState('Error al crear la cuenta. Inténtalo de nuevo.'));
@@ -113,11 +113,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(UnauthenticatedState());
   }
 
-  String _friendlyError(ClientException e) {
-    final raw = (e.response['message'] as String?)?.trim();
-    if (raw == null || raw.isEmpty || raw == 'Failed to authenticate.') {
-      return 'Credenciales incorrectas o correo ya registrado.';
+  /// Traduce las excepciones típicas de Supabase GoTrue a mensajes legibles
+  String _friendlyError(AuthException e) {
+    final message = e.message.toLowerCase();
+
+    if (message.contains('invalid login credentials')) {
+      return 'Correo o contraseña incorrectos.';
     }
-    return raw;
+    if (message.contains('user already registered') ||
+        message.contains('already exists')) {
+      return 'El correo electrónico ya está registrado.';
+    }
+    if (message.contains('password should be at least')) {
+      return 'La contraseña debe tener al menos 6 caracteres.';
+    }
+    if (message.contains('rate limit exceeded')) {
+      return 'Demasiados intentos. Inténtalo de nuevo en unos minutos.';
+    }
+
+    return e.message;
   }
 }

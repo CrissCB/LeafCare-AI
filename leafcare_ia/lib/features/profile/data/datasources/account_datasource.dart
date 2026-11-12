@@ -1,78 +1,81 @@
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/profile/data/models/account_model.dart';
 
-/// Se encarga de leer y actualizar los datos de la cuenta.
+/// Se encarga de leer y actualizar los datos de la cuenta en Supabase.
 class AccountDatasource {
+  const AccountDatasource({required this.supabaseClient});
+
+  final AppSupabaseClient supabaseClient;
+
+  SupabaseClient get _client => supabaseClient.client;
+
   /// Trae los datos actuales del usuario con la sesión abierta.
   Future<AccountModel> fetchAccount() async {
-    final pb = await PocketBaseClient.getInstance();
-    final current = pb.authStore.record;
+    final user = supabaseClient.currentUser;
 
-    if (current == null) {
+    if (user == null) {
       throw Exception('No hay una sesión abierta.');
     }
 
-    // Pedimos el registro actualizado al servidor (no solo el guardado).
-    final record = await pb.collection('users').getOne(current.id);
-    final data = record.data;
+    // Consultar el perfil de la tabla 'profiles'
+    final response = await _client
+        .from('profiles')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
 
-    final name = data['name']?.toString().trim() ?? '';
-    final email = data['email']?.toString().trim() ?? '';
+    final name =
+        response?['name']?.toString().trim() ??
+        user.userMetadata?['name']?.toString().trim() ??
+        '';
+    final email = user.email?.trim() ?? '';
+    final provider = response?['auth_provider']?.toString() ?? '';
+    final createdAtStr = response?['created_at']?.toString() ?? user.createdAt;
 
     return AccountModel(
-      id: record.id,
+      id: user.id,
       name: name.isNotEmpty ? name : 'Usuario',
       email: email,
-      providerLabel: _providerLabel(data['auth_provider']?.toString() ?? ''),
-      memberSince: DateTime.tryParse(
-        record.get<String>('created'),
-      )?.toLocal(),
+      providerLabel: _providerLabel(provider),
+      memberSince: DateTime.tryParse(createdAtStr)?.toLocal(),
     );
   }
 
-  /// Cambia el nombre del usuario y actualiza la sesión guardada.
+  /// Cambia el nombre del usuario tanto en 'profiles' como en la metadata de Auth.
   Future<void> updateName(String name) async {
-    final pb = await PocketBaseClient.getInstance();
-    final current = pb.authStore.record;
+    final userId = supabaseClient.currentUserId;
 
-    if (current == null) {
+    if (userId == null) {
       throw Exception('No hay una sesión abierta.');
     }
 
-    final updated = await pb.collection('users').update(
-      current.id,
-      body: {'name': name.trim()},
-    );
+    final cleanName = name.trim();
 
-    // Guardamos el registro nuevo para que el nombre cambie en toda la app.
-    pb.authStore.save(pb.authStore.token, updated);
+    // 1. Actualizar en la tabla public.profiles
+    await _client.from('profiles').update({'name': cleanName}).eq('id', userId);
+
+    // 2. Sincronizar metadata en Supabase Auth (GoTrue)
+    await _client.auth.updateUser(UserAttributes(data: {'name': cleanName}));
   }
 
-  /// Cambia la contraseña. PocketBase pide la contraseña actual.
+  /// Cambia la contraseña del usuario en Supabase Auth.
   Future<void> changePassword({
     required String oldPassword,
     required String newPassword,
   }) async {
-    final pb = await PocketBaseClient.getInstance();
-    final current = pb.authStore.record;
+    final user = supabaseClient.currentUser;
 
-    if (current == null) {
+    if (user == null) {
       throw Exception('No hay una sesión abierta.');
     }
 
-    await pb.collection('users').update(
-      current.id,
-      body: {
-        'oldPassword': oldPassword,
-        'password': newPassword,
-        'passwordConfirm': newPassword,
-      },
-    );
+    // Supabase actualiza la contraseña directamente en el usuario autenticado
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   /// Traduce el método de registro a un texto entendible.
   String _providerLabel(String provider) {
-    switch (provider) {
+    switch (provider.toUpperCase()) {
       case 'GOOGLE':
         return 'Google';
       case 'MICROSOFT':

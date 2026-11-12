@@ -31,10 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # SDK de PocketBase para conectar con el backend local y autenticator
-  pocketbase: ^0.25.2               # SDK Oficial de PocketBase
+  # SDK de supabase para conectar con el backend local y autenticator
+  supabase_flutter: ^2.18.3               # SDK Oficial de supabase
   flutter_secure_storage: ^11.2.0   # Persistencia segura de tokens (iOS/Android/Web)
-  shared_preferences: ^2.5.6        # Almacenamiento local para la sesión de PocketBase
+  shared_preferences: ^2.5.6        # Almacenamiento local para la sesión de supabase
 
   # Manejo de Estado y Enrutamiento (Cross-Platform)
   flutter_bloc: ^9.1.1            # Gestión de estado predictiva
@@ -42,6 +42,7 @@ dependencies:
 
   # Peticiones HTTP (APIs de Terceros: Pl@ntNet, Perenual, RSS)
   http: ^1.6.0
+  xml: ^7.0.1
 
   # Cámara y Multimedia
   image_picker: ^1.2.4            # Captura desde cámara o galería (Soporta Web y Mobile)

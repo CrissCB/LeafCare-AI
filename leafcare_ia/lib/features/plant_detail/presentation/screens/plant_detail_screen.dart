@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 
 import 'package:leafcare_ia/features/plant_detail/data/datasources/plant_remote_datasource.dart';
 import 'package:leafcare_ia/features/plant_detail/data/repositories/plant_repository.dart';
@@ -25,7 +26,11 @@ class PlantDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => PlantDetailBloc(
-        repository: const PlantRepository(datasource: PlantRemoteDatasource()),
+        repository: const PlantRepository(
+          datasource: PlantRemoteDatasource(
+            supabaseClient: AppSupabaseClient(),
+          ),
+        ),
       )..add(LoadPlantDetail(plantId)),
       child: Scaffold(
         backgroundColor: AppColors.pageBg,

@@ -19,9 +19,9 @@ class ApiConstants {
   static final String perenualApiKey =
       dotenv.env['PERENUAL_API_KEY'] ?? 'PERENUAL_API_KEY';
 
-  static const String rssToJasonUrl =
-      'https://api.rss2json.com/v1/api.json?rss_url=';
-
-  // Feed de jardinería en español (se convierte a JSON con rss2json)
+  // Feed de jardinería en español (URL directa para Android / iOS nativo)
   static const String gardeningRssUrl = 'https://www.jardineriaon.com/feed';
+
+  // Ruta relativa que intercepta Nginx en Flutter Web
+  static const String webGardeningRssProxy = '/external-rss/';
 }

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
 import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
@@ -18,7 +19,9 @@ class SecurityScreen extends StatefulWidget {
 }
 
 class _SecurityScreenState extends State<SecurityScreen> {
-  final SecurityDatasource _datasource = SecurityDatasource();
+  final SecurityDatasource _datasource = SecurityDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
 
   SecurityModel? _security;
   bool _loading = true;
@@ -386,10 +389,7 @@ class _InfoRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppColors.slate,
-              ),
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.slate),
             ),
           ),
           Text(

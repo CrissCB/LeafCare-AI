@@ -1,42 +1,48 @@
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/alerts/data/models/alert_model.dart';
 
-/// Consultas a la colección `ia_alerts` de PocketBase.
+/// Consultas a la tabla `ia_alerts` en Supabase.
 class AlertsDatasource {
+  const AlertsDatasource({required this.supabaseClient});
+
+  final AppSupabaseClient supabaseClient;
+
+  SupabaseClient get _client => supabaseClient.client;
+
   /// Trae todas las alertas del usuario, de la más nueva a la más vieja.
   Future<List<AlertModel>> fetchAlerts() async {
-    final pb = await PocketBaseClient.getInstance();
-    final userId = pb.authStore.record?.id;
+    final userId = supabaseClient.currentUserId;
     if (userId == null) return [];
 
-    final records = await pb.collection('ia_alerts').getFullList(
-      filter: 'user_id = "$userId"',
-      sort: '-created',
-    );
+    final response = await _client
+        .from('ia_alerts')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
 
-    return records.map(AlertModel.fromRecord).toList();
+    final data = response as List<dynamic>;
+    return data
+        .map((item) => AlertModel.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   /// Marca una alerta como leída.
   Future<void> markAsRead(String alertId) async {
-    final pb = await PocketBaseClient.getInstance();
-
-    await pb.collection('ia_alerts').update(
-      alertId,
-      body: {'is_read': true},
-    );
+    await _client.from('ia_alerts').update({'is_read': true}).eq('id', alertId);
   }
 
-  /// Marca todas las alertas indicadas como leídas.
+  /// Marca todas las alertas indicadas como leídas en una sola consulta batch.
   Future<void> markAllAsRead(List<String> alertIds) async {
-    for (final id in alertIds) {
-      await markAsRead(id);
-    }
+    if (alertIds.isEmpty) return;
+
+    await _client
+        .from('ia_alerts')
+        .update({'is_read': true})
+        .inFilter('id', alertIds);
   }
 
-  /// Borra una alerta.
+  /// Borra una alerta de PostgreSQL.
   Future<void> deleteAlert(String alertId) async {
-    final pb = await PocketBaseClient.getInstance();
-    await pb.collection('ia_alerts').delete(alertId);
+    await _client.from('ia_alerts').delete().eq('id', alertId);
   }
 }

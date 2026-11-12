@@ -5,6 +5,7 @@ import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
 import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/profile/data/datasources/notifications_datasource.dart';
 import 'package:leafcare_ia/features/profile/data/models/notification_settings_model.dart';
 
@@ -17,7 +18,9 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final NotificationsDatasource _datasource = NotificationsDatasource();
+  final NotificationsDatasource _datasource = NotificationsDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
 
   NotificationSettingsModel? _settings;
   bool _loading = true;
@@ -160,8 +163,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           subtitle: 'Recibe alertas mientras usas LeafCare AI.',
           value: settings.pushEnabled,
           enabled: !_saving,
-          onChanged: (value) =>
-              _save(settings.copyWith(pushEnabled: value)),
+          onChanged: (value) => _save(settings.copyWith(pushEnabled: value)),
         ),
         const SizedBox(height: 10),
         _SwitchCard(
@@ -170,8 +172,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           subtitle: 'Un correo cada día con los cuidados pendientes.',
           value: settings.dailyEmail,
           enabled: !_saving,
-          onChanged: (value) =>
-              _save(settings.copyWith(dailyEmail: value)),
+          onChanged: (value) => _save(settings.copyWith(dailyEmail: value)),
         ),
         const SizedBox(height: 10),
         _SwitchCard(
@@ -180,8 +181,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           subtitle: 'Un correo a la semana con el estado de tus plantas.',
           value: settings.weeklyEmail,
           enabled: !_saving,
-          onChanged: (value) =>
-              _save(settings.copyWith(weeklyEmail: value)),
+          onChanged: (value) => _save(settings.copyWith(weeklyEmail: value)),
         ),
         if (_saving) ...[
           const SizedBox(height: 18),

@@ -1,13 +1,18 @@
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/profile/data/models/user_profile_model.dart';
 
-/// Obtiene los datos del usuario con la sesión abierta.
+/// Obtiene los datos del perfil y métricas del usuario en Supabase.
 class ProfileDatasource {
-  Future<UserProfileModel> fetchProfile() async {
-    final pb = await PocketBaseClient.getInstance();
-    final record = pb.authStore.record;
+  const ProfileDatasource({required this.supabaseClient});
 
-    if (record == null) {
+  final AppSupabaseClient supabaseClient;
+
+  SupabaseClient get _client => supabaseClient.client;
+
+  Future<UserProfileModel> fetchProfile() async {
+    final user = supabaseClient.currentUser;
+
+    if (user == null) {
       return const UserProfileModel(
         name: 'Usuario',
         email: '',
@@ -20,51 +25,67 @@ class ProfileDatasource {
       );
     }
 
-    final data = record.data;
-    final userId = record.id;
+    final userId = user.id;
 
-    // Contamos las plantas, escaneos y alertas del usuario.
-    final plants = await pb.collection('user_plants').getList(
-      page: 1,
-      perPage: 1,
-      filter: 'user_id = "$userId"',
-    );
-    final alerts = await pb.collection('ia_alerts').getList(
-      page: 1,
-      perPage: 1,
-      filter: 'user_id = "$userId"',
-    );
-    final scans = await pb.collection('plant_scans').getList(
-      page: 1,
-      perPage: 1,
-    );
+    // 1. Obtener la información del perfil desde la tabla `profiles`
+    final profileData = await _client
+        .from('profiles')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
 
-    final name = data['name']?.toString().trim() ?? '';
-    final email = data['email']?.toString().trim() ?? '';
+    // 2. Contar plantas, alertas y escaneos del usuario en paralelo
+    final counts = await Future.wait([
+      _client
+          .from('user_plants')
+          .count(CountOption.exact)
+          .eq('user_id', userId),
+      _client.from('ia_alerts').count(CountOption.exact).eq('user_id', userId),
+      _client
+          .from('plant_scans')
+          .count(CountOption.exact)
+          .eq('user_id', userId),
+    ]);
+
+    final plantsCount = counts[0];
+    final alertsCount = counts[1];
+    final scansCount = counts[2];
+
+    final name =
+        profileData?['name']?.toString().trim() ??
+        user.userMetadata?['name']?.toString().trim() ??
+        '';
+    final email = user.email?.trim() ?? '';
+    final avatarRaw = profileData?['avatar_url']?.toString() ?? '';
+    final providerRaw = profileData?['auth_provider']?.toString() ?? '';
+    final createdAtStr =
+        profileData?['created_at']?.toString() ?? user.createdAt;
 
     return UserProfileModel(
       name: name.isNotEmpty ? name : 'Usuario',
       email: email,
-      avatarUrl: _avatarUrl(record.id, data['avatar']?.toString() ?? ''),
-      providerLabel: _providerLabel(data['auth_provider']?.toString() ?? ''),
-      plantsCount: plants.totalItems,
-      scansCount: scans.totalItems,
-      alertsCount: alerts.totalItems,
-      memberSince: DateTime.tryParse(
-        record.get<String>('created'),
-      )?.toLocal(),
+      avatarUrl: _avatarUrl(avatarRaw),
+      providerLabel: _providerLabel(providerRaw),
+      plantsCount: plantsCount,
+      scansCount: scansCount,
+      alertsCount: alertsCount,
+      memberSince: DateTime.tryParse(createdAtStr)?.toLocal(),
     );
   }
 
-  /// Construye la dirección completa de la foto de perfil (si tiene).
-  String _avatarUrl(String recordId, String fileName) {
-    if (fileName.isEmpty) return '';
-    return 'http://127.0.0.1:8082/api/files/users/$recordId/$fileName';
+  /// Procesa la URL del avatar (si es externa o reside en Supabase Storage)
+  String _avatarUrl(String path) {
+    if (path.isEmpty) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    // Obtener la URL pública desde el bucket nativo de Supabase Storage
+    return _client.storage.from('plant-photos').getPublicUrl(path);
   }
 
   /// Traduce el método de registro a un texto entendible.
   String _providerLabel(String provider) {
-    switch (provider) {
+    switch (provider.toUpperCase()) {
       case 'GOOGLE':
         return 'Google';
       case 'MICROSOFT':

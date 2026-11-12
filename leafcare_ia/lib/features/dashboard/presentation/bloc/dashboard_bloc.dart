@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:leafcare_ia/core/network/supabase_client.dart';
+
 import 'package:leafcare_ia/features/dashboard/data/datasources/dashboard_datasource.dart';
 import 'package:leafcare_ia/features/dashboard/data/models/care_reminder_model.dart';
 import 'package:leafcare_ia/features/dashboard/data/models/user_plant_model.dart';
@@ -62,7 +64,9 @@ class DashboardError extends DashboardState {
 /// Controla el estado de la pantalla principal.
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   DashboardBloc({DashboardDatasource? datasource})
-    : _datasource = datasource ?? DashboardDatasource(),
+    : _datasource =
+          datasource ??
+          DashboardDatasource(supabaseClient: const AppSupabaseClient()),
       super(const DashboardInitial()) {
     on<LoadDashboard>(_onLoad);
     on<RefreshDashboard>(_onLoad);

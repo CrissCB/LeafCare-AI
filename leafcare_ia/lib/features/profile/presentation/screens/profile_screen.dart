@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:leafcare_ia/features/profile/data/datasources/profile_datasource.dart';
 import 'package:leafcare_ia/features/profile/data/models/user_profile_model.dart';
@@ -19,7 +20,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final ProfileDatasource _datasource = ProfileDatasource();
+  final ProfileDatasource _datasource = ProfileDatasource(
+    supabaseClient: const AppSupabaseClient(),
+  );
   late Future<UserProfileModel> _profileFuture;
 
   @override
@@ -40,9 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Cerrar sesión',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),

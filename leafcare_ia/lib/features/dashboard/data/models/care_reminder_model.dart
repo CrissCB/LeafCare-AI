@@ -1,8 +1,6 @@
-import 'package:pocketbase/pocketbase.dart';
-
 /// Representa un recordatorio de cuidado (regar, abonar, podar...).
 ///
-/// Se construye a partir de un registro de la colección `care_reminders`.
+/// Se construye a partir de un registro de la tabla `care_reminders` en Supabase.
 class CareReminderModel {
   const CareReminderModel({
     required this.id,
@@ -12,7 +10,7 @@ class CareReminderModel {
     required this.isIaGenerated,
   });
 
-  /// Identificador del registro en PocketBase.
+  /// Identificador del registro en Supabase/PostgreSQL (UUID).
   final String id;
 
   /// Qué hay que hacer ("Regar", "Abonar", "Pulverizar"...).
@@ -27,20 +25,28 @@ class CareReminderModel {
   /// Si el recordatorio lo generó la inteligencia artificial.
   final bool isIaGenerated;
 
-  /// Convierte un registro de PocketBase en un objeto de la aplicación.
-  factory CareReminderModel.fromRecord(RecordModel record) {
-    final data = record.data;
-    final rawDate = data['scheduled_time']?.toString() ?? '';
+  /// Convierte un mapa JSON de Supabase/PostgreSQL en un objeto de la aplicación.
+  factory CareReminderModel.fromJson(Map<String, dynamic> json) {
+    final rawDate = json['scheduled_time']?.toString() ?? '';
+    final rawAction = json['treatment_action']?.toString().trim() ?? '';
 
     return CareReminderModel(
-      id: record.id,
-      action: (data['treatment_action']?.toString().trim().isNotEmpty ?? false)
-          ? data['treatment_action'].toString().trim()
-          : 'Cuidado de planta',
-      scheduledTime:
-          DateTime.tryParse(rawDate)?.toLocal() ?? DateTime.now(),
-      isCompleted: data['is_completed'] == true,
-      isIaGenerated: data['is_ia_generated'] == true,
+      id: json['id']?.toString() ?? '',
+      action: rawAction.isNotEmpty ? rawAction : 'Cuidado de planta',
+      scheduledTime: DateTime.tryParse(rawDate)?.toLocal() ?? DateTime.now(),
+      isCompleted: json['is_completed'] == true,
+      isIaGenerated: json['is_ia_generated'] == true,
     );
+  }
+
+  /// Convierte la instancia a un mapa JSON para inserciones o actualizaciones.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'treatment_action': action,
+      'scheduled_time': scheduledTime.toIso8601String(),
+      'is_completed': isCompleted,
+      'is_ia_generated': isIaGenerated,
+    };
   }
 }
