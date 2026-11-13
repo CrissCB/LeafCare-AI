@@ -45,6 +45,7 @@ GoRouter createRouter(AuthBloc authBloc) {
     '/register',
     '/verify-email',
     '/forgot-password',
+    '/login-callback',
   };
 
   return GoRouter(
@@ -105,6 +106,11 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/reset-password',
         builder: (context, state) => const ResetPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/login-callback',
+        builder: (context, state) =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
       ),
 
       // Detalle de una planta (pantalla completa con botón de regresar)

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart' as xml;
@@ -10,23 +12,31 @@ class RssBlogDatasource {
 
   Future<List<ArticleModel>> fetchArticles() async {
     try {
-      final url = kIsWeb
-          ? ApiConstants.webGardeningRssProxy
-          : ApiConstants.gardeningRssUrl;
-
       final response = await http
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
+          .get(
+            Uri.parse(ApiConstants.gardeningRssUrl),
+            headers: const {
+              'Accept': 'application/rss+xml, application/xml, text/xml',
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 14) LeafCareAI/1.0',
+            },
+          )
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode != 200) {
+        debugPrint('❌ [RSS] HTTP ${response.statusCode}');
         return const [];
       }
 
-      final document = xml.XmlDocument.parse(response.body);
+      final rawXml = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final document = xml.XmlDocument.parse(rawXml);
       final items = document.findAllElements('item');
 
-      return items.map(_fromXmlItem).toList(growable: false);
+      return items
+          .map(_fromXmlItem)
+          .where((article) => article.id.isNotEmpty)
+          .toList(growable: false);
     } catch (e) {
+      debugPrint('❌ [RSS] Error cargando feed: $e');
       return const [];
     }
   }
@@ -34,8 +44,8 @@ class RssBlogDatasource {
   ArticleModel _fromXmlItem(xml.XmlElement node) {
     final title =
         node.findElements('title').firstOrNull?.innerText ?? 'Sin título';
-    final link = node.findElements('link').firstOrNull?.innerText ?? '';
-    final guid = node.findElements('guid').firstOrNull?.innerText ?? link;
+    final link = node.findElements('link').firstOrNull?.innerText.trim() ?? '';
+    final guid = node.findElements('guid').firstOrNull?.innerText.trim() ?? '';
     final author =
         node.findElements('dc:creator').firstOrNull?.innerText ?? 'Redacción';
     final category =
@@ -45,7 +55,7 @@ class RssBlogDatasource {
     final contentEncoded =
         node.findElements('content:encoded').firstOrNull?.innerText ?? '';
 
-    String imageUrl =
+    final imageUrl =
         _extractImageUrl(contentEncoded) ??
         _extractImageUrl(descriptionRaw) ??
         '';
@@ -55,8 +65,10 @@ class RssBlogDatasource {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
+    final articleId = link.isNotEmpty ? link : guid;
+
     return ArticleModel(
-      id: guid.trim().isNotEmpty ? guid.trim() : link.trim(),
+      id: articleId,
       title: title.trim(),
       author: author.trim(),
       category: category.trim(),
@@ -64,13 +76,13 @@ class RssBlogDatasource {
       readTime: _readTimeFrom(
         contentEncoded.isNotEmpty ? contentEncoded : descriptionRaw,
       ),
-      link: link.trim(),
+      link: articleId,
       description: cleanDescription,
     );
   }
 
   String? _extractImageUrl(String html) {
-    final regExp = RegExp(r'<img[^>]+src="([^">]+)"');
+    final regExp = RegExp(r'''<img[^>]+src=["']([^"']+)["']''');
     final match = regExp.firstMatch(html);
     return match?.group(1);
   }

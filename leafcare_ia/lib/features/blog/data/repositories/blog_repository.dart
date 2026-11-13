@@ -16,20 +16,46 @@ class BlogRepository {
 
   SupabaseClient get _client => supabaseClient.client;
 
-  /// Obtiene los artículos del RSS y los cruza con los guardados en PostgreSQL
+  /// Obtiene los artículos del RSS y los cruza con los guardados en Supabase.
   Future<List<ArticleModel>> fetchArticles() async {
     final articles = await rssDatasource.fetchArticles();
-    final savedIds = await _savedExternalIds();
-    if (savedIds.isEmpty) return articles;
+    final savedMap = await _savedArticlesIndex();
+    if (savedMap.isEmpty) return articles;
 
     return articles
-        .map(
-          (article) => article.copyWith(saved: savedIds.contains(article.id)),
-        )
+        .map((article) {
+          final recordId = savedMap[article.id];
+          if (recordId == null) return article;
+          return article.copyWith(saved: true, savedRecordId: recordId);
+        })
         .toList(growable: false);
   }
 
-  /// Alterna el estado de guardado (Insertar o Eliminar registro)
+  /// Obtiene únicamente los artículos guardados por el usuario desde Supabase.
+  Future<List<ArticleModel>> fetchSavedArticles() async {
+    final userId = supabaseClient.currentUserId;
+    if (!supabaseClient.isAuthenticated || userId == null) {
+      return const [];
+    }
+
+    try {
+      final response = await _client
+          .from(_table)
+          .select()
+          .eq('user_id', userId)
+          .order('saved_at', ascending: false);
+
+      return (response as List<dynamic>)
+          .map((row) => ArticleModel.fromJson(row as Map<String, dynamic>))
+          .toList(growable: false);
+    } on PostgrestException {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Alterna el estado de guardado (Insertar/Upsert o Eliminar registro).
   Future<ArticleModel> toggleSave(ArticleModel article) async {
     final userId = supabaseClient.currentUserId;
     if (!supabaseClient.isAuthenticated || userId == null) {
@@ -37,47 +63,51 @@ class BlogRepository {
     }
 
     if (article.saved) {
-      // Eliminar artículo de marcadores
       await _client
           .from(_table)
           .delete()
           .eq('external_article_id', article.id)
           .eq('user_id', userId);
 
-      return article.copyWith(saved: false);
+      return article.copyWith(saved: false, clearSavedRecordId: true);
     }
 
-    // Insertar artículo en marcadores
-    await _client.from(_table).insert({
-      'external_article_id': article.id,
-      'title': article.title,
-      'author': article.author,
-      'category': article.category,
-      'image_url': article.imageUrl,
-      'read_time': article.readTime,
-      'user_id': userId,
-    });
+    final inserted = await _client
+        .from(_table)
+        .upsert(
+          article.toJson(userId),
+          onConflict: 'user_id,external_article_id',
+        )
+        .select('id')
+        .single();
 
-    return article.copyWith(saved: true);
+    return article.copyWith(
+      saved: true,
+      savedRecordId: inserted['id']?.toString(),
+    );
   }
 
-  /// Consulta los IDs de los artículos guardados por el usuario
-  Future<Set<String>> _savedExternalIds() async {
+  /// Mapa `{ external_article_id: record_uuid }` de los artículos guardados.
+  Future<Map<String, String>> _savedArticlesIndex() async {
     try {
       final userId = supabaseClient.currentUserId;
       if (!supabaseClient.isAuthenticated || userId == null) return const {};
 
       final response = await _client
           .from(_table)
-          .select('external_article_id')
+          .select('id, external_article_id')
           .eq('user_id', userId);
 
-      final List<dynamic> data = response as List<dynamic>;
-
-      return data
-          .map((row) => row['external_article_id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
+      final result = <String, String>{};
+      for (final row in response as List<dynamic>) {
+        final map = row as Map<String, dynamic>;
+        final externalId = map['external_article_id'] as String? ?? '';
+        final recordId = map['id']?.toString() ?? '';
+        if (externalId.isNotEmpty && recordId.isNotEmpty) {
+          result[externalId] = recordId;
+        }
+      }
+      return result;
     } on PostgrestException {
       return const {};
     } catch (_) {

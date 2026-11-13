@@ -23,7 +23,11 @@ class ArticleModel {
   final bool saved;
   final String? savedRecordId;
 
-  ArticleModel copyWith({bool? saved, String? savedRecordId}) {
+  ArticleModel copyWith({
+    bool? saved,
+    String? savedRecordId,
+    bool clearSavedRecordId = false,
+  }) {
     return ArticleModel(
       id: id,
       title: title,
@@ -34,28 +38,34 @@ class ArticleModel {
       link: link,
       description: description,
       saved: saved ?? this.saved,
-      savedRecordId: savedRecordId ?? this.savedRecordId,
+      savedRecordId: clearSavedRecordId
+          ? null
+          : (savedRecordId ?? this.savedRecordId),
     );
   }
 
-  // Mapeo desde la respuesta de PocketBase a ArticleModel
-  factory ArticleModel.fromPocketBase(Map<String, dynamic> json) {
+  /// Mapeo desde una fila de la tabla `saved_articles` en Supabase.
+  factory ArticleModel.fromJson(Map<String, dynamic> json) {
+    final externalId = json['external_article_id'] as String? ?? '';
+
     return ArticleModel(
-      id: json['external_article_id'] as String? ?? '',
+      id: externalId,
       title: json['title'] as String? ?? 'Sin título',
       author: json['author'] as String? ?? 'Redacción',
       category: json['category'] as String? ?? 'Jardinería',
       imageUrl: json['image_url'] as String? ?? '',
       readTime: json['read_time'] as String? ?? '3 min',
-      link: json['external_article_id'] as String? ?? '',
-      description: '',
+      link: (json['link'] as String?)?.isNotEmpty == true
+          ? json['link'] as String
+          : externalId,
+      description: json['description'] as String? ?? '',
       saved: true,
-      savedRecordId: json['id'] as String?,
+      savedRecordId: json['id']?.toString(),
     );
   }
 
-  // Mapeo desde ArticleModel a la estructura esperada por PocketBase
-  Map<String, dynamic> toPocketBase(String userId) {
+  /// Mapeo desde ArticleModel hacia el payload de inserción en Supabase.
+  Map<String, dynamic> toJson(String userId) {
     return {
       'user_id': userId,
       'external_article_id': id,
