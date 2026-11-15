@@ -1,67 +1,63 @@
-/// Representa una planta que pertenece al usuario.
-///
-/// Se construye a partir de un registro de la tabla `user_plants` en Supabase.
 class UserPlantModel {
   const UserPlantModel({
     required this.id,
+    required this.userId,
+    this.groupId,
     required this.customName,
     required this.scientificName,
     required this.commonName,
-    required this.imageUrl,
-    required this.healthLabel,
-    required this.healthColorHex,
+    this.speciesOrigin,
+    this.externalSpeciesId,
+    this.primaryImageUrl,
+    required this.healthStatusLabel,
+    required this.healthStatusColor,
+    this.createdAt,
   });
 
-  /// Identificador del registro en Supabase/PostgreSQL (UUID).
   final String id;
-
-  /// Nombre que el usuario le puso a su planta.
+  final String userId;
+  final String? groupId;
   final String customName;
-
-  /// Nombre científico (por ejemplo, Monstera deliciosa).
   final String scientificName;
-
-  /// Nombre común (por ejemplo, Costilla de Adán).
   final String commonName;
+  final String? speciesOrigin;
+  final String? externalSpeciesId;
+  final String? primaryImageUrl;
+  final String healthStatusLabel;
+  final String healthStatusColor;
+  final DateTime? createdAt;
 
-  /// Dirección de la foto principal (guardada en Supabase Storage / S3).
-  final String imageUrl;
-
-  /// Etiqueta del estado de salud ("Saludable", "Necesita atención"...).
-  final String healthLabel;
-
-  /// Color del estado en formato hexadecimal ("#22C55E").
-  final String healthColorHex;
-
-  /// Convierte un mapa JSON de Supabase/PostgreSQL en un objeto de la aplicación.
   factory UserPlantModel.fromJson(Map<String, dynamic> json) {
     return UserPlantModel(
       id: json['id']?.toString() ?? '',
-      customName: _text(json['custom_name'], 'Mi planta'),
-      scientificName: _text(json['scientific_name'], ''),
-      commonName: _text(json['common_name'], ''),
-      imageUrl: _text(json['primary_image_url'], ''),
-      healthLabel: _text(json['health_status_label'], 'Sin evaluar'),
-      healthColorHex: _text(json['health_status_color'], '#64748B'),
+      userId: json['user_id']?.toString() ?? '',
+      groupId: json['group_id']?.toString(),
+      customName: json['custom_name'] as String? ?? 'Mi planta',
+      scientificName: json['scientific_name'] as String? ?? '',
+      commonName: json['common_name'] as String? ?? '',
+      speciesOrigin: json['species_origin'] as String?,
+      externalSpeciesId: json['external_species_id']?.toString(),
+      primaryImageUrl: json['primary_image_url'] as String?,
+      healthStatusLabel: json['health_status_label'] as String? ?? 'Saludable',
+      healthStatusColor: json['health_status_color'] as String? ?? '#22C55E',
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 
-  /// Convierte la instancia a un mapa JSON para inserciones o actualizaciones.
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
+      'user_id': userId,
+      'group_id': groupId,
       'custom_name': customName,
       'scientific_name': scientificName,
       'common_name': commonName,
-      'primary_image_url': imageUrl,
-      'health_status_label': healthLabel,
-      'health_status_color': healthColorHex,
+      'species_origin': speciesOrigin,
+      'external_species_id': externalSpeciesId,
+      'primary_image_url': primaryImageUrl,
+      'health_status_label': healthStatusLabel,
+      'health_status_color': healthStatusColor,
     };
-  }
-
-  /// Devuelve el texto limpio o el valor por defecto si viene vacío.
-  static String _text(Object? value, String fallback) {
-    final text = value?.toString().trim() ?? '';
-    return text.isEmpty ? fallback : text;
   }
 }

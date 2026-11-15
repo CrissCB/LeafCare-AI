@@ -15,8 +15,9 @@ import 'package:leafcare_ia/features/auth/presentation/screens/register_screen.d
 import 'package:leafcare_ia/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:leafcare_ia/features/auth/presentation/screens/verify_email_screen.dart';
 // Dashboard imports
-import 'package:leafcare_ia/features/dashboard/presentation/screens/all_plants_screen.dart';
 import 'package:leafcare_ia/features/dashboard/presentation/screens/home_screen.dart';
+// All Plants imports
+import 'package:leafcare_ia/features/plants/presentation/screens/plants_screen.dart';
 // Plant Detail imports
 import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 // Scanner imports
@@ -123,7 +124,7 @@ GoRouter createRouter(AuthBloc authBloc) {
       // Lista completa de plantas
       GoRoute(
         path: '/plants',
-        builder: (context, state) => const AllPlantsScreen(),
+        builder: (context, state) => const PlantsScreen(),
       ),
 
       // Pantallas internas del perfil

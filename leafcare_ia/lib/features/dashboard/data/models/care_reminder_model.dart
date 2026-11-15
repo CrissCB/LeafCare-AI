@@ -1,52 +1,90 @@
-/// Representa un recordatorio de cuidado (regar, abonar, podar...).
-///
-/// Se construye a partir de un registro de la tabla `care_reminders` en Supabase.
 class CareReminderModel {
   const CareReminderModel({
     required this.id,
-    required this.action,
+    this.userId,
+    this.plantId,
+    required this.treatmentAction,
     required this.scheduledTime,
-    required this.isCompleted,
-    required this.isIaGenerated,
+    this.isRecurrent = false,
+    this.isCompleted = false,
+    this.isIaGenerated = false,
+    this.snoozeHoursAdded = 0,
+    this.createdAt,
+    this.plantName,
+    this.plantImageUrl,
   });
 
-  /// Identificador del registro en Supabase/PostgreSQL (UUID).
   final String id;
-
-  /// Qué hay que hacer ("Regar", "Abonar", "Pulverizar"...).
-  final String action;
-
-  /// Fecha y hora en que toca el cuidado (ya convertida a hora local).
+  final String? userId;
+  final String? plantId;
+  final String treatmentAction;
   final DateTime scheduledTime;
-
-  /// Si el usuario ya marcó el cuidado como hecho.
+  final bool isRecurrent;
   final bool isCompleted;
-
-  /// Si el recordatorio lo generó la inteligencia artificial.
   final bool isIaGenerated;
+  final double snoozeHoursAdded;
+  final DateTime? createdAt;
 
-  /// Convierte un mapa JSON de Supabase/PostgreSQL en un objeto de la aplicación.
-  factory CareReminderModel.fromJson(Map<String, dynamic> json) {
-    final rawDate = json['scheduled_time']?.toString() ?? '';
-    final rawAction = json['treatment_action']?.toString().trim() ?? '';
+  // Campos resueltos si la consulta incluye `user_plants(custom_name, primary_image_url)`
+  final String? plantName;
+  final String? plantImageUrl;
 
+  CareReminderModel copyWith({
+    bool? isCompleted,
+    DateTime? scheduledTime,
+    double? snoozeHoursAdded,
+  }) {
     return CareReminderModel(
-      id: json['id']?.toString() ?? '',
-      action: rawAction.isNotEmpty ? rawAction : 'Cuidado de planta',
-      scheduledTime: DateTime.tryParse(rawDate)?.toLocal() ?? DateTime.now(),
-      isCompleted: json['is_completed'] == true,
-      isIaGenerated: json['is_ia_generated'] == true,
+      id: id,
+      userId: userId,
+      plantId: plantId,
+      treatmentAction: treatmentAction,
+      scheduledTime: scheduledTime ?? this.scheduledTime,
+      isRecurrent: isRecurrent,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isIaGenerated: isIaGenerated,
+      snoozeHoursAdded: snoozeHoursAdded ?? this.snoozeHoursAdded,
+      createdAt: createdAt,
+      plantName: plantName,
+      plantImageUrl: plantImageUrl,
     );
   }
 
-  /// Convierte la instancia a un mapa JSON para inserciones o actualizaciones.
-  Map<String, dynamic> toJson() {
+  factory CareReminderModel.fromJson(Map<String, dynamic> json) {
+    final plantJoin = json['user_plants'] is Map<String, dynamic>
+        ? json['user_plants'] as Map<String, dynamic>
+        : null;
+
+    return CareReminderModel(
+      id: json['id']?.toString() ?? '',
+      userId: json['user_id']?.toString(),
+      plantId: json['plant_id']?.toString(),
+      treatmentAction: json['treatment_action'] as String? ?? 'Cuidado general',
+      scheduledTime: json['scheduled_time'] != null
+          ? DateTime.parse(json['scheduled_time'].toString()).toLocal()
+          : DateTime.now(),
+      isRecurrent: json['is_recurrent'] as bool? ?? false,
+      isCompleted: json['is_completed'] as bool? ?? false,
+      isIaGenerated: json['is_ia_generated'] as bool? ?? false,
+      snoozeHoursAdded: (json['snooze_hours_added'] as num?)?.toDouble() ?? 0.0,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())?.toLocal()
+          : null,
+      plantName: plantJoin?['custom_name'] as String?,
+      plantImageUrl: plantJoin?['primary_image_url'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson(String currentUserId) {
     return {
-      'id': id,
-      'treatment_action': action,
-      'scheduled_time': scheduledTime.toIso8601String(),
+      'user_id': userId ?? currentUserId,
+      'plant_id': plantId,
+      'treatment_action': treatmentAction,
+      'scheduled_time': scheduledTime.toUtc().toIso8601String(),
+      'is_recurrent': isRecurrent,
       'is_completed': isCompleted,
       'is_ia_generated': isIaGenerated,
+      'snooze_hours_added': snoozeHoursAdded,
     };
   }
 }

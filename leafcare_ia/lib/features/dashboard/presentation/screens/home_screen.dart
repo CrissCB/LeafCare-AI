@@ -28,13 +28,13 @@ class HomeScreen extends StatelessWidget {
 class _HomeView extends StatelessWidget {
   const _HomeView();
 
-  void _snack(BuildContext context, String message) {
+  void _snack(BuildContext context, String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppColors.primary,
+          backgroundColor: isError ? AppColors.error : AppColors.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -43,16 +43,30 @@ class _HomeView extends StatelessWidget {
       );
   }
 
+  Future<void> _pushAndRefresh(BuildContext context, String route) async {
+    await context.push(route);
+    if (context.mounted) {
+      context.read<DashboardBloc>().add(const RefreshDashboard());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<DashboardBloc, DashboardState>(
+    return BlocConsumer<DashboardBloc, DashboardState>(
+      listenWhen: (previous, current) =>
+          current is DashboardLoaded &&
+          current.notice != null &&
+          previous != current,
+      listener: (context, state) {
+        if (state is DashboardLoaded && state.notice != null) {
+          _snack(context, state.notice!, isError: state.noticeIsError);
+        }
+      },
       builder: (context, state) {
-        // Mientras carga mostramos el indicador
         if (state is DashboardInitial || state is DashboardLoading) {
           return const Scaffold(body: LoadingIndicator());
         }
 
-        // Si algo falló, mostramos el error con botón para reintentar
         if (state is DashboardError) {
           return Scaffold(
             body: EmptyStateView(
@@ -66,6 +80,7 @@ class _HomeView extends StatelessWidget {
         }
 
         final loaded = state as DashboardLoaded;
+        final hasMorePlants = loaded.totalPlantsCount > loaded.topPlants.length;
 
         return Scaffold(
           backgroundColor: AppColors.pageBg,
@@ -73,12 +88,10 @@ class _HomeView extends StatelessWidget {
             color: AppColors.primary,
             onRefresh: () async {
               final bloc = context.read<DashboardBloc>();
-              // Esperamos a que termine la recarga para cerrar el indicador
-              final finished = bloc.stream.firstWhere(
-                (state) => state is! DashboardLoading,
-              );
               bloc.add(const RefreshDashboard());
-              await finished;
+              await bloc.stream.firstWhere(
+                (s) => s is DashboardLoaded || s is DashboardError,
+              );
             },
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -86,9 +99,11 @@ class _HomeView extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: HomeHeader(
                     userName: loaded.userName,
-                    plantsCount: loaded.plants.length,
-                    alertsCount: loaded.unreadAlerts,
-                    remindersCount: loaded.reminders.length,
+                    avatarUrl: loaded.avatarUrl,
+                    alertsCount: loaded.unreadAlertsCount,
+                    onNavigateReturn: () => context.read<DashboardBloc>().add(
+                      const RefreshDashboard(),
+                    ),
                   ),
                 ),
                 SliverPadding(
@@ -100,50 +115,55 @@ class _HomeView extends StatelessWidget {
                         // ---------- MIS PLANTAS ----------
                         _SectionTitle(
                           title: 'Mis plantas',
-                          actionLabel: loaded.plants.isEmpty
+                          count: loaded.totalPlantsCount,
+                          actionLabel: loaded.topPlants.isEmpty
                               ? null
                               : 'Ver todas',
-                          onAction: () => context.push('/plants'),
+                          onAction: () => _pushAndRefresh(context, '/plants'),
                         ),
                         const SizedBox(height: 12),
-                        if (loaded.plants.isEmpty)
-                          _EmptyPlants(
-                            onScan: () => context.go('/scan'),
-                          )
+                        if (loaded.topPlants.isEmpty)
+                          _EmptyPlants(onScan: () => context.go('/scan'))
                         else
                           _PlantsRow(
-                            plants: loaded.plants,
-                            onTap: (plant) =>
-                                context.push('/plant/${plant.id}'),
+                            plants: loaded.topPlants,
+                            totalPlantsCount: loaded.totalPlantsCount,
+                            showSeeMore: hasMorePlants,
+                            onTapPlant: (plant) =>
+                                _pushAndRefresh(context, '/plant/${plant.id}'),
+                            onTapSeeMore: () =>
+                                _pushAndRefresh(context, '/plants'),
                           ),
 
                         const SizedBox(height: 26),
 
                         // ---------- CONSEJO DEL DÍA ----------
-                        const _DailyTipCard(),
+                        _DailyTipCard(tip: loaded.dailyTip),
 
                         const SizedBox(height: 26),
 
-                        // ---------- RECORDATORIOS ----------
-                        const _SectionTitle(title: 'Recordatorios de hoy'),
+                        // ---------- RECORDATORIOS DE HOY ----------
+                        _SectionTitle(
+                          title: 'Recordatorios de hoy',
+                          actionLabel: 'Gestionar',
+                          onAction: () => _pushAndRefresh(context, '/alerts'),
+                        ),
                         const SizedBox(height: 12),
-                        if (loaded.reminders.isEmpty)
+                        if (loaded.todayReminders.isEmpty)
                           const _EmptyReminders()
                         else
                           Column(
                             children: [
-                              for (final reminder in loaded.reminders)
+                              for (final reminder in loaded.todayReminders)
                                 ReminderTile(
                                   reminder: reminder,
-                                  onComplete: () {
-                                    context.read<DashboardBloc>().add(
-                                      CompleteReminder(reminder.id),
-                                    );
-                                    _snack(
-                                      context,
-                                      '${reminder.action} marcado como hecho',
-                                    );
-                                  },
+                                  isCompleting: loaded.completingReminderIds
+                                      .contains(reminder.id),
+                                  onTap: () =>
+                                      _pushAndRefresh(context, '/alerts'),
+                                  onComplete: () => context
+                                      .read<DashboardBloc>()
+                                      .add(CompleteReminder(reminder.id)),
                                 ),
                             ],
                           ),
@@ -160,30 +180,195 @@ class _HomeView extends StatelessWidget {
   }
 }
 
-/// Tarjeta con un consejo de cuidado distinto cada día.
-class _DailyTipCard extends StatelessWidget {
-  const _DailyTipCard();
+/// Título de sección con contador opcional junto al texto y acción a la derecha.
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.title,
+    this.count,
+    this.actionLabel,
+    this.onAction,
+  });
 
-  /// Lista de consejos. Se elige uno según el día del año.
-  static const List<String> _tips = [
-    'Riega por la mañana: las plantas absorben mejor el agua antes del calor.',
-    'Toca la tierra antes de regar. Si todavía está húmeda, espera un día más.',
-    'Gira la maceta cada semana para que la planta crezca pareja hacia la luz.',
-    'Limpia las hojas con un paño húmedo: respirarán mejor y lucirán más verdes.',
-    'No riegues de más. El exceso de agua pudre las raíces y es más común de lo que parece.',
-    'Abona en primavera y verano, cuando la planta está creciendo con más fuerza.',
-    'Retira las hojas secas para evitar hongos y dar espacio a las nuevas.',
-    'Usa macetas con agujero de drenaje: el agua sobrante debe poder salir.',
-    'Pulveriza agua en las hojas de plantas tropicales si el ambiente está muy seco.',
-    'Deja reposar el agua del grifo unas horas antes de regar, así pierde cloro.',
-  ];
+  final String title;
+  final int? count;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final dayOfYear = now.difference(DateTime(now.year)).inDays;
-    final tip = _tips[dayOfYear % _tips.length];
+    return Row(
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.anthracite,
+          ),
+        ),
+        if (count != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.mint,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$count',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ],
+        const Spacer(),
+        if (actionLabel != null)
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              actionLabel!,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
+/// Lista horizontal con las tarjetas de las primeras plantas y botón "Ver más".
+class _PlantsRow extends StatelessWidget {
+  const _PlantsRow({
+    required this.plants,
+    required this.totalPlantsCount,
+    required this.showSeeMore,
+    required this.onTapPlant,
+    required this.onTapSeeMore,
+  });
+
+  final List<UserPlantModel> plants;
+  final int totalPlantsCount;
+  final bool showSeeMore;
+  final ValueChanged<UserPlantModel> onTapPlant;
+  final VoidCallback onTapSeeMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = plants.length + (showSeeMore ? 1 : 0);
+    final remainingCount = totalPlantsCount - plants.length;
+
+    return SizedBox(
+      height: 210,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: itemCount,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          if (showSeeMore && index == plants.length) {
+            return _SeeMorePlantsCard(
+              remainingCount: remainingCount,
+              onTap: onTapSeeMore,
+            );
+          }
+
+          final plant = plants[index];
+          return PlantCard(plant: plant, onTap: () => onTapPlant(plant));
+        },
+      ),
+    );
+  }
+}
+
+/// Tarjeta final del carrusel cuando el usuario tiene más de 5 plantas.
+class _SeeMorePlantsCard extends StatelessWidget {
+  const _SeeMorePlantsCard({required this.remainingCount, required this.onTap});
+
+  final int remainingCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 136,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.25),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                color: AppColors.mint,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_forward_rounded,
+                color: AppColors.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Ver más',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+            if (remainingCount > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '+$remainingCount ${remainingCount == 1 ? 'planta' : 'plantas'}',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 11, color: AppColors.slate),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta con el consejo diario provisto desde el estado del Dashboard.
+class _DailyTipCard extends StatelessWidget {
+  const _DailyTipCard({required this.tip});
+
+  final String tip;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -237,78 +422,6 @@ class _DailyTipCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Título de sección con un enlace opcional a la derecha.
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final String title;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.anthracite,
-          ),
-        ),
-        const Spacer(),
-        if (actionLabel != null)
-          TextButton(
-            onPressed: onAction,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 0),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              actionLabel!,
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Lista horizontal con las tarjetas de las plantas.
-class _PlantsRow extends StatelessWidget {
-  const _PlantsRow({required this.plants, required this.onTap});
-
-  final List<UserPlantModel> plants;
-  final ValueChanged<UserPlantModel> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 210,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: plants.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final plant = plants[index];
-          return PlantCard(plant: plant, onTap: () => onTap(plant));
-        },
       ),
     );
   }
@@ -374,10 +487,7 @@ class _EmptyPlants extends StatelessWidget {
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.white,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),

@@ -13,7 +13,8 @@ class PlantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = _colorFromHex(plant.healthColorHex);
+    final statusColor = _colorFromHex(plant.healthStatusColor);
+    final imageUrl = plant.primaryImageUrl?.trim() ?? '';
 
     return GestureDetector(
       onTap: onTap,
@@ -39,9 +40,9 @@ class PlantCard extends StatelessWidget {
             SizedBox(
               height: 104,
               width: double.infinity,
-              child: plant.imageUrl.isNotEmpty
+              child: imageUrl.isNotEmpty
                   ? Image.network(
-                      plant.imageUrl,
+                      imageUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => const _PlantPlaceholder(),
                     )
@@ -100,7 +101,7 @@ class PlantCard extends StatelessWidget {
                         const SizedBox(width: 5),
                         Flexible(
                           child: Text(
-                            plant.healthLabel,
+                            plant.healthStatusLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
