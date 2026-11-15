@@ -25,8 +25,48 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _HomeView extends StatelessWidget {
+class _HomeView extends StatefulWidget {
   const _HomeView();
+
+  @override
+  State<_HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<_HomeView> {
+  GoRouterDelegate? _routerDelegate;
+  String _lastPath = '/dashboard';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final delegate = GoRouter.of(context).routerDelegate;
+    if (_routerDelegate != delegate) {
+      _routerDelegate?.removeListener(_onRouteChanged);
+      _routerDelegate = delegate..addListener(_onRouteChanged);
+      final initialPath = delegate.currentConfiguration.uri.path;
+      if (initialPath.isNotEmpty) {
+        _lastPath = initialPath;
+      }
+    }
+  }
+
+  void _onRouteChanged() {
+    final currentPath = _routerDelegate?.currentConfiguration.uri.path ?? '';
+    if (currentPath == '/dashboard' && _lastPath != '/dashboard') {
+      if (mounted) {
+        context.read<DashboardBloc>().add(const RefreshDashboard());
+      }
+    }
+    if (currentPath.isNotEmpty) {
+      _lastPath = currentPath;
+    }
+  }
+
+  @override
+  void dispose() {
+    _routerDelegate?.removeListener(_onRouteChanged);
+    super.dispose();
+  }
 
   void _snack(BuildContext context, String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)
@@ -146,7 +186,7 @@ class _HomeView extends StatelessWidget {
                         _SectionTitle(
                           title: 'Recordatorios de hoy',
                           actionLabel: 'Gestionar',
-                          onAction: () => _pushAndRefresh(context, '/alerts'),
+                          onAction: () => context.go('/alerts'),
                         ),
                         const SizedBox(height: 12),
                         if (loaded.todayReminders.isEmpty)
@@ -159,8 +199,7 @@ class _HomeView extends StatelessWidget {
                                   reminder: reminder,
                                   isCompleting: loaded.completingReminderIds
                                       .contains(reminder.id),
-                                  onTap: () =>
-                                      _pushAndRefresh(context, '/alerts'),
+                                  onTap: () => context.go('/alerts'),
                                   onComplete: () => context
                                       .read<DashboardBloc>()
                                       .add(CompleteReminder(reminder.id)),

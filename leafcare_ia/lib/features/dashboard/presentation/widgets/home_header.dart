@@ -20,7 +20,7 @@ class HomeHeader extends StatelessWidget {
   final int alertsCount;
   final VoidCallback? onNavigateReturn;
 
-  Future<void> _goTo(BuildContext context, String route) async {
+  Future<void> _pushSubRoute(BuildContext context, String route) async {
     await context.push(route);
     onNavigateReturn?.call();
   }
@@ -93,7 +93,7 @@ class HomeHeader extends StatelessWidget {
                       message: 'Ver estadísticas',
                       child: InkWell(
                         borderRadius: BorderRadius.circular(20),
-                        onTap: () => _goTo(context, '/stats'),
+                        onTap: () => _pushSubRoute(context, '/stats'),
                         child: Container(
                           width: 40,
                           height: 40,
@@ -112,7 +112,7 @@ class HomeHeader extends StatelessWidget {
                     const SizedBox(width: 10),
                     _NotificationBell(
                       count: alertsCount,
-                      onTap: () => _goTo(context, '/alerts'),
+                      onTap: () => context.go('/alerts'),
                     ),
                   ],
                 ),
