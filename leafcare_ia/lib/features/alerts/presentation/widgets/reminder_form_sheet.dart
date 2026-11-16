@@ -586,7 +586,7 @@ class _ReminderFormSheetState extends State<ReminderFormSheet> {
                         ),
                         Switch.adaptive(
                           value: _isRecurrent,
-                          activeColor: AppColors.primary,
+                          activeThumbColor: AppColors.primary,
                           onChanged: (val) =>
                               setState(() => _isRecurrent = val),
                         ),

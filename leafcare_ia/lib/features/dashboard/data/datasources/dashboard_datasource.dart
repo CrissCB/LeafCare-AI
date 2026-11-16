@@ -1,5 +1,3 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/dashboard/data/models/care_reminder_model.dart';
 import 'package:leafcare_ia/features/dashboard/data/models/user_plant_model.dart';

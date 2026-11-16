@@ -1,7 +1,6 @@
 import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/profile/data/models/user_profile_model.dart';
 
-/// Obtiene los datos del perfil y métricas del usuario en Supabase.
 class ProfileDatasource {
   const ProfileDatasource({required this.supabaseClient});
 
@@ -10,88 +9,97 @@ class ProfileDatasource {
   SupabaseClient get _client => supabaseClient.client;
 
   Future<UserProfileModel> fetchProfile() async {
-    final user = supabaseClient.currentUser;
-
+    final user = _client.auth.currentUser;
     if (user == null) {
-      return const UserProfileModel(
-        name: 'Usuario',
-        email: '',
-        avatarUrl: '',
-        providerLabel: 'Correo',
-        plantsCount: 0,
-        scansCount: 0,
-        alertsCount: 0,
-        memberSince: null,
-      );
+      throw Exception('No hay una sesión activa.');
     }
 
-    final userId = user.id;
-
-    // 1. Obtener la información del perfil desde la tabla `profiles`
-    final profileData = await _client
-        .from('profiles')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
-
-    // 2. Contar plantas, alertas y escaneos del usuario en paralelo
-    final counts = await Future.wait([
-      _client
-          .from('user_plants')
-          .count(CountOption.exact)
-          .eq('user_id', userId),
-      _client.from('ia_alerts').count(CountOption.exact).eq('user_id', userId),
-      _client
-          .from('plant_scans')
-          .count(CountOption.exact)
-          .eq('user_id', userId),
+    // Ejecuta las consultas en paralelo contra el esquema actual de Supabase
+    final results = await Future.wait([
+      _fetchProfileRow(user.id),
+      _countUserPlants(user.id),
+      _countUserScans(user.id),
+      _countUserAlerts(user.id),
     ]);
 
-    final plantsCount = counts[0];
-    final alertsCount = counts[1];
-    final scansCount = counts[2];
+    final profileRow = results[0] as Map<String, dynamic>?;
+    final plantsCount = results[1] as int;
+    final scansCount = results[2] as int;
+    final alertsCount = results[3] as int;
 
-    final name =
-        profileData?['name']?.toString().trim() ??
-        user.userMetadata?['name']?.toString().trim() ??
+    final metadata = user.userMetadata ?? const <String, dynamic>{};
+
+    final rawName =
+        (profileRow?['name'] ??
+                profileRow?['full_name'] ??
+                metadata['name'] ??
+                metadata['full_name'])
+            ?.toString()
+            .trim();
+
+    final email = (user.email ?? profileRow?['email']?.toString() ?? '').trim();
+
+    final resolvedName = (rawName != null && rawName.isNotEmpty)
+        ? rawName
+        : (email.contains('@') ? email.split('@').first : 'Usuario LeafCare');
+
+    final resolvedAvatar =
+        (profileRow?['avatar_url'] ??
+                metadata['avatar_url'] ??
+                metadata['picture'])
+            ?.toString()
+            .trim() ??
         '';
-    final email = user.email?.trim() ?? '';
-    final avatarRaw = profileData?['avatar_url']?.toString() ?? '';
-    final providerRaw = profileData?['auth_provider']?.toString() ?? '';
-    final createdAtStr =
-        profileData?['created_at']?.toString() ?? user.createdAt;
+
+    final rawProvider = user.appMetadata['provider']?.toString();
 
     return UserProfileModel(
-      name: name.isNotEmpty ? name : 'Usuario',
+      id: user.id,
+      name: resolvedName,
       email: email,
-      avatarUrl: _avatarUrl(avatarRaw),
-      providerLabel: _providerLabel(providerRaw),
+      avatarUrl: resolvedAvatar,
+      providerLabel: UserProfileModel.formatProvider(rawProvider),
       plantsCount: plantsCount,
       scansCount: scansCount,
       alertsCount: alertsCount,
-      memberSince: DateTime.tryParse(createdAtStr)?.toLocal(),
     );
   }
 
-  /// Procesa la URL del avatar (si es externa o reside en Supabase Storage)
-  String _avatarUrl(String path) {
-    if (path.isEmpty) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
+  Future<Map<String, dynamic>?> _fetchProfileRow(String userId) async {
+    try {
+      return await _client
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+    } catch (_) {
+      return null;
     }
-    // Obtener la URL pública desde el bucket nativo de Supabase Storage
-    return _client.storage.from('plant-photos').getPublicUrl(path);
   }
 
-  /// Traduce el método de registro a un texto entendible.
-  String _providerLabel(String provider) {
-    switch (provider.toUpperCase()) {
-      case 'GOOGLE':
-        return 'Google';
-      case 'MICROSOFT':
-        return 'Microsoft';
-      default:
-        return 'Correo';
-    }
+  Future<int> _countUserPlants(String userId) async {
+    final response = await _client
+        .from('user_plants')
+        .select('id')
+        .eq('user_id', userId);
+    return (response as List<dynamic>).length;
+  }
+
+  Future<int> _countUserScans(String userId) async {
+    // `plant_scans` se vincula al usuario mediante `plant_id -> user_plants.user_id`
+    final response = await _client
+        .from('plant_scans')
+        .select('id, user_plants!inner(user_id)')
+        .eq('user_plants.user_id', userId);
+    return (response as List<dynamic>).length;
+  }
+
+  Future<int> _countUserAlerts(String userId) async {
+    final response = await _client
+        .from('ia_alerts')
+        .select('id')
+        .eq('user_id', userId)
+        .isFilter('deleted_at', null);
+    return (response as List<dynamic>).length;
   }
 }

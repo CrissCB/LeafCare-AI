@@ -1,6 +1,6 @@
-/// Datos que se muestran en la pantalla de perfil.
 class UserProfileModel {
   const UserProfileModel({
+    required this.id,
     required this.name,
     required this.email,
     required this.avatarUrl,
@@ -8,27 +8,34 @@ class UserProfileModel {
     required this.plantsCount,
     required this.scansCount,
     required this.alertsCount,
-    required this.memberSince,
   });
 
+  final String id;
   final String name;
   final String email;
   final String avatarUrl;
-
-  /// Cómo se registró: "Correo", "Google" o "Microsoft".
   final String providerLabel;
-
   final int plantsCount;
   final int scansCount;
   final int alertsCount;
 
-  /// Fecha de creación de la cuenta.
-  final DateTime? memberSince;
-
-  /// Primera letra del nombre, para cuando no hay foto.
   String get initial {
-    final clean = name.trim();
-    if (clean.isEmpty) return '?';
-    return clean.substring(0, 1).toUpperCase();
+    final trimmed = name.trim();
+    if (trimmed.isNotEmpty) return trimmed[0].toUpperCase();
+    if (email.trim().isNotEmpty) return email.trim()[0].toUpperCase();
+    return 'U';
+  }
+
+  static String formatProvider(String? rawProvider) {
+    switch (rawProvider?.toLowerCase().trim()) {
+      case 'google':
+        return 'Google';
+      case 'apple':
+        return 'Apple';
+      case 'github':
+        return 'GitHub';
+      default:
+        return 'Correo electrónico';
+    }
   }
 }

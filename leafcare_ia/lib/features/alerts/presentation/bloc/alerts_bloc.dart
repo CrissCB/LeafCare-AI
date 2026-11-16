@@ -241,15 +241,17 @@ class AlertsLoaded extends AlertsState {
 }
 
 class AlertsBloc extends Bloc<AlertsEvent, AlertsState> {
-  AlertsBloc({AlertsRepository? repository})
-    : _repository =
-          repository ??
-          AlertsRepository(
-            datasource: AlertsDatasource(
-              supabaseClient: const AppSupabaseClient(),
-            ),
-          ),
-      super(const AlertsInitial()) {
+  AlertsBloc({
+    AlertsRepository? repository,
+    this.initialTab = AlertsTab.reminders,
+  }) : _repository =
+           repository ??
+           AlertsRepository(
+             datasource: AlertsDatasource(
+               supabaseClient: const AppSupabaseClient(),
+             ),
+           ),
+       super(const AlertsInitial()) {
     on<LoadAlertsModule>(_onLoad);
     on<RefreshAlertsModule>(_onRefresh);
     on<AlertsTabChanged>(_onTabChanged);
@@ -264,6 +266,7 @@ class AlertsBloc extends Bloc<AlertsEvent, AlertsState> {
   }
 
   final AlertsRepository _repository;
+  final AlertsTab initialTab;
 
   Future<void> _onLoad(
     LoadAlertsModule event,
@@ -624,6 +627,7 @@ class AlertsBloc extends Bloc<AlertsEvent, AlertsState> {
             reminders: data.reminders,
             plantOptions: data.plantOptions,
             groupOptions: data.groupOptions,
+            selectedTab: initialTab,
           ),
         );
       }

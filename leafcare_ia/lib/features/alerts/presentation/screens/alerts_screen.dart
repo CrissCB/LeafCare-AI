@@ -17,19 +17,37 @@ import 'package:leafcare_ia/features/alerts/presentation/widgets/ia_engine_banne
 
 /// Pantalla principal del Centro de Alertas (`/alerts`).
 class AlertsScreen extends StatelessWidget {
-  const AlertsScreen({super.key});
+  const AlertsScreen({super.key, this.initialTab = AlertsTab.reminders});
+
+  final AlertsTab initialTab;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => AlertsBloc()..add(const LoadAlertsModule()),
-      child: const _AlertsView(),
+      create: (_) =>
+          AlertsBloc(initialTab: initialTab)..add(const LoadAlertsModule()),
+      child: _AlertsView(requestedTab: initialTab),
     );
   }
 }
 
-class _AlertsView extends StatelessWidget {
-  const _AlertsView();
+class _AlertsView extends StatefulWidget {
+  const _AlertsView({required this.requestedTab});
+
+  final AlertsTab requestedTab;
+
+  @override
+  State<_AlertsView> createState() => _AlertsViewState();
+}
+
+class _AlertsViewState extends State<_AlertsView> {
+  @override
+  void didUpdateWidget(covariant _AlertsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.requestedTab != widget.requestedTab) {
+      context.read<AlertsBloc>().add(AlertsTabChanged(widget.requestedTab));
+    }
+  }
 
   void _snack(BuildContext context, String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)

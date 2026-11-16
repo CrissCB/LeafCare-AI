@@ -24,11 +24,14 @@ import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_det
 import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen.dart';
 // Alerts imports
 import 'package:leafcare_ia/features/alerts/presentation/screens/alerts_screen.dart';
+import 'package:leafcare_ia/features/alerts/presentation/bloc/alerts_bloc.dart';
 // Blog imports
 import 'package:leafcare_ia/features/blog/data/datasources/rss_blog_datasource.dart';
 import 'package:leafcare_ia/features/blog/data/repositories/blog_repository.dart';
 import 'package:leafcare_ia/features/blog/presentation/bloc/blog_bloc.dart';
 import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart';
+// Stats imports
+import 'package:leafcare_ia/features/stats/presentation/screens/stats_screen.dart';
 // Profile imports
 import 'package:leafcare_ia/features/profile/presentation/screens/about_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/account_screen.dart';
@@ -36,7 +39,6 @@ import 'package:leafcare_ia/features/profile/presentation/screens/help_screen.da
 import 'package:leafcare_ia/features/profile/presentation/screens/notifications_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/profile_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/security_screen.dart';
-import 'package:leafcare_ia/features/profile/presentation/screens/stats_screen.dart';
 
 import 'go_router_refresh_stream.dart';
 
@@ -162,7 +164,14 @@ GoRouter createRouter(AuthBloc authBloc) {
             routes: [
               GoRoute(
                 path: '/alerts',
-                builder: (context, state) => const AlertsScreen(),
+                builder: (context, state) {
+                  final tabParam = state.uri.queryParameters['tab'];
+                  final initialTab = tabParam == 'ia'
+                      ? AlertsTab.iaAlerts
+                      : AlertsTab.reminders;
+
+                  return AlertsScreen(initialTab: initialTab);
+                },
               ),
             ],
           ),
