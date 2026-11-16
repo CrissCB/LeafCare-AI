@@ -5,6 +5,7 @@ class UserProfileModel {
     required this.email,
     required this.avatarUrl,
     required this.providerLabel,
+    required this.isGoogleAccount,
     required this.plantsCount,
     required this.scansCount,
     required this.alertsCount,
@@ -15,6 +16,7 @@ class UserProfileModel {
   final String email;
   final String avatarUrl;
   final String providerLabel;
+  final bool isGoogleAccount;
   final int plantsCount;
   final int scansCount;
   final int alertsCount;

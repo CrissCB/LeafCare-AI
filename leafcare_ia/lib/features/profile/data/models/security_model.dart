@@ -1,4 +1,3 @@
-/// Estado de seguridad del usuario (colección `user_security`).
 class SecurityModel {
   const SecurityModel({
     required this.recordId,
@@ -6,38 +5,60 @@ class SecurityModel {
     required this.twoFactorType,
     required this.failedAttempts,
     required this.lockedUntil,
+    required this.userEmail,
+    required this.isExternalProvider,
+    required this.providerLabel,
+    required this.lastSignInAt,
+    this.verifiedTotpFactorId,
   });
 
-  /// Identificador del registro en `user_security`.
   final String recordId;
-
-  /// Si la verificación en dos pasos está activa.
   final bool is2faEnabled;
-
-  /// Cómo se verifica: "EMAIL" o "APP".
-  final String twoFactorType;
-
-  /// Intentos de inicio de sesión fallidos.
+  final String? twoFactorType; // 'EMAIL' | 'APP' | null
   final int failedAttempts;
-
-  /// Si la cuenta está bloqueada temporalmente, hasta cuándo.
   final DateTime? lockedUntil;
+  final String userEmail;
+  final bool isExternalProvider;
+  final String providerLabel;
+  final DateTime? lastSignInAt;
+  final String? verifiedTotpFactorId;
 
-  /// Texto amigable del método de verificación.
+  bool get isLocked =>
+      lockedUntil != null && lockedUntil!.isAfter(DateTime.now());
+
   String get twoFactorLabel {
-    switch (twoFactorType) {
-      case 'APP':
-        return 'Aplicación autenticadora';
+    switch (twoFactorType?.toUpperCase()) {
       case 'EMAIL':
         return 'Correo electrónico';
+      case 'APP':
+        return 'Aplicación autenticadora';
       default:
-        return 'Sin método elegido';
+        return 'No configurado';
     }
   }
 
-  /// Si la cuenta está bloqueada en este momento.
-  bool get isLocked {
-    final until = lockedUntil;
-    return until != null && until.isAfter(DateTime.now());
+  SecurityModel copyWith({
+    bool? is2faEnabled,
+    String? twoFactorType,
+    bool clearTwoFactorType = false,
+    String? verifiedTotpFactorId,
+    bool clearTotpFactorId = false,
+  }) {
+    return SecurityModel(
+      recordId: recordId,
+      is2faEnabled: is2faEnabled ?? this.is2faEnabled,
+      twoFactorType: clearTwoFactorType
+          ? null
+          : (twoFactorType ?? this.twoFactorType),
+      failedAttempts: failedAttempts,
+      lockedUntil: lockedUntil,
+      userEmail: userEmail,
+      isExternalProvider: isExternalProvider,
+      providerLabel: providerLabel,
+      lastSignInAt: lastSignInAt,
+      verifiedTotpFactorId: clearTotpFactorId
+          ? null
+          : (verifiedTotpFactorId ?? this.verifiedTotpFactorId),
+    );
   }
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+import 'package:leafcare_ia/features/auth/data/models/auth_user_model.dart';
 import 'package:leafcare_ia/features/auth/data/repositories/auth_repository.dart';
 
 // --- EVENTOS ---
@@ -15,13 +17,31 @@ class _AuthSessionChangedEvent extends AuthEvent {
   _AuthSessionChangedEvent(this.event, this.session);
 }
 
-class PasswordRecoveryState extends AuthState {}
-
 class LoginSubmittedEvent extends AuthEvent {
   final String email;
   final String password;
 
   LoginSubmittedEvent({required this.email, required this.password});
+}
+
+/// Usuario ingresó el código de 6 dígitos en el paso 2FA.
+class AuthTwoFactorSubmitted extends AuthEvent {
+  AuthTwoFactorSubmitted({required this.challenge, required this.code});
+
+  final TwoFactorChallenge challenge;
+  final String code;
+}
+
+/// Reenviar código por correo durante el reto 2FA.
+class AuthTwoFactorResendRequested extends AuthEvent {
+  AuthTwoFactorResendRequested({required this.challenge});
+
+  final TwoFactorChallenge challenge;
+}
+
+/// El usuario canceló la verificación 2FA: cerramos la sesión parcial.
+class AuthTwoFactorCancelled extends AuthEvent {
+  AuthTwoFactorCancelled();
 }
 
 class RegisterSubmittedEvent extends AuthEvent {
@@ -71,6 +91,38 @@ class AuthenticatedState extends AuthState {}
 
 class UnauthenticatedState extends AuthState {}
 
+class PasswordRecoveryState extends AuthState {}
+
+/// Contraseña correcta, pero falta completar la verificación en dos pasos.
+class AuthTwoFactorRequired extends AuthState {
+  AuthTwoFactorRequired({
+    required this.challenge,
+    this.isVerifying = false,
+    this.errorMessage,
+    this.infoMessage,
+  });
+
+  final TwoFactorChallenge challenge;
+  final bool isVerifying;
+  final String? errorMessage;
+  final String? infoMessage;
+
+  AuthTwoFactorRequired copyWith({
+    bool? isVerifying,
+    String? errorMessage,
+    bool clearError = false,
+    String? infoMessage,
+    bool clearInfo = false,
+  }) {
+    return AuthTwoFactorRequired(
+      challenge: challenge,
+      isVerifying: isVerifying ?? this.isVerifying,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      infoMessage: clearInfo ? null : (infoMessage ?? this.infoMessage),
+    );
+  }
+}
+
 /// El usuario se registró, pero debe abrir el enlace enviado a su correo.
 class EmailVerificationPendingState extends AuthState {
   final String email;
@@ -103,9 +155,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   late final StreamSubscription<sb.AuthState> _authSubscription;
   final AuthRepository repository;
 
+  /// Evita que el stream `onAuthStateChange` emita `AuthenticatedState` antes
+  /// de comprobar si el usuario tiene 2FA activo en `user_security`.
+  bool _evaluatingTwoFactor = false;
+
   AuthBloc({required this.repository}) : super(AuthInitialState()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginSubmittedEvent>(_onLoginSubmitted);
+    on<AuthTwoFactorSubmitted>(_onTwoFactorSubmitted);
+    on<AuthTwoFactorResendRequested>(_onTwoFactorResendRequested);
+    on<AuthTwoFactorCancelled>(_onTwoFactorCancelled);
     on<RegisterSubmittedEvent>(_onRegisterSubmitted);
     on<ResendVerificationEmailEvent>(_onResendVerification);
     on<ForgotPasswordRequestedEvent>(_onForgotPassword);
@@ -123,12 +182,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
-    if (state is PasswordRecoveryState) return;
+    if (state is PasswordRecoveryState || state is AuthTwoFactorRequired) {
+      return;
+    }
 
     emit(AuthLoadingState());
     final hasSession = await repository.checkSession();
 
-    if (state is PasswordRecoveryState) return;
+    if (state is PasswordRecoveryState || state is AuthTwoFactorRequired) {
+      return;
+    }
 
     if (hasSession) {
       emit(AuthenticatedState());
@@ -145,9 +208,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(PasswordRecoveryState());
     } else if (event.event == sb.AuthChangeEvent.signedIn &&
         event.session != null &&
-        state is! PasswordRecoveryState) {
+        !_evaluatingTwoFactor &&
+        state is! PasswordRecoveryState &&
+        state is! AuthTwoFactorRequired) {
       emit(AuthenticatedState());
     } else if (event.event == sb.AuthChangeEvent.signedOut) {
+      _evaluatingTwoFactor = false;
       emit(UnauthenticatedState());
     }
   }
@@ -156,7 +222,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LoginSubmittedEvent event,
     Emitter<AuthState> emit,
   ) async {
+    _evaluatingTwoFactor = true;
     emit(AuthLoadingState());
+
     try {
       final result = await repository.login(
         email: event.email,
@@ -164,11 +232,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
 
       if (result.requiresEmailVerification) {
+        _evaluatingTwoFactor = false;
         emit(EmailVerificationPendingState(email: result.email));
-      } else {
-        emit(AuthenticatedState());
+        return;
       }
+
+      final challenge = await repository.checkTwoFactorRequirement(
+        userId: result.userId,
+        email: result.email,
+      );
+
+      _evaluatingTwoFactor = false;
+
+      if (challenge != null) {
+        emit(AuthTwoFactorRequired(challenge: challenge));
+        return;
+      }
+
+      emit(AuthenticatedState());
     } on AuthFailureException catch (e) {
+      _evaluatingTwoFactor = false;
       emit(
         AuthErrorState(
           e.message,
@@ -177,8 +260,79 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ),
       );
     } catch (_) {
+      _evaluatingTwoFactor = false;
       emit(AuthErrorState('No se pudo conectar con el servidor.'));
     }
+  }
+
+  Future<void> _onTwoFactorSubmitted(
+    AuthTwoFactorSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! AuthTwoFactorRequired) return;
+
+    emit(
+      currentState.copyWith(
+        isVerifying: true,
+        clearError: true,
+        clearInfo: true,
+      ),
+    );
+
+    try {
+      await repository.verifyTwoFactorCode(
+        challenge: event.challenge,
+        code: event.code,
+      );
+      emit(AuthenticatedState());
+    } on AuthFailureException catch (e) {
+      emit(currentState.copyWith(isVerifying: false, errorMessage: e.message));
+    } catch (_) {
+      emit(
+        currentState.copyWith(
+          isVerifying: false,
+          errorMessage:
+              'Código inválido o expirado. Verifica e intenta de nuevo.',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onTwoFactorResendRequested(
+    AuthTwoFactorResendRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! AuthTwoFactorRequired) return;
+
+    try {
+      await repository.resendTwoFactorEmailCode(event.challenge.email);
+      emit(
+        currentState.copyWith(
+          clearError: true,
+          infoMessage: 'Enviamos un nuevo código a ${event.challenge.email}',
+        ),
+      );
+    } on AuthFailureException catch (e) {
+      emit(currentState.copyWith(errorMessage: e.message));
+    } catch (_) {
+      emit(
+        currentState.copyWith(
+          errorMessage:
+              'No se pudo reenviar el código. Intenta en unos segundos.',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onTwoFactorCancelled(
+    AuthTwoFactorCancelled event,
+    Emitter<AuthState> emit,
+  ) async {
+    _evaluatingTwoFactor = false;
+    await repository.logout();
+    emit(UnauthenticatedState());
   }
 
   Future<void> _onRegisterSubmitted(
@@ -282,6 +436,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LogoutRequestedEvent event,
     Emitter<AuthState> emit,
   ) async {
+    _evaluatingTwoFactor = false;
     await repository.logout();
     emit(UnauthenticatedState());
   }

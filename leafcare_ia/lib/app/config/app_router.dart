@@ -33,7 +33,6 @@ import 'package:leafcare_ia/features/blog/presentation/screens/blog_screen.dart'
 // Stats imports
 import 'package:leafcare_ia/features/stats/presentation/screens/stats_screen.dart';
 // Profile imports
-import 'package:leafcare_ia/features/profile/presentation/screens/about_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/account_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/help_screen.dart';
 import 'package:leafcare_ia/features/profile/presentation/screens/notifications_screen.dart';
@@ -142,8 +141,17 @@ GoRouter createRouter(AuthBloc authBloc) {
         path: '/security',
         builder: (context, state) => const SecurityScreen(),
       ),
-      GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
-      GoRoute(path: '/help', builder: (context, state) => const HelpScreen()),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) {
+          final tabParam = state.uri.queryParameters['tab'];
+          final initialTab = tabParam == 'about'
+              ? HelpSectionTab.about
+              : HelpSectionTab.support;
+
+          return HelpScreen(initialTab: initialTab);
+        },
+      ),
       GoRoute(path: '/stats', builder: (context, state) => const StatsScreen()),
 
       // Rutas Protegidas dentro de la Shell de Navegación

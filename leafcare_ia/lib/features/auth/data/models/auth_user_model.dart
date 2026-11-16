@@ -36,3 +36,20 @@ class AuthUserModel {
     );
   }
 }
+
+enum TwoFactorMethod { app, email }
+
+/// Resultado intermedio cuando el usuario pasa la contraseña pero requiere 2FA.
+class TwoFactorChallenge {
+  const TwoFactorChallenge({
+    required this.userId,
+    required this.email,
+    required this.method,
+    this.factorId,
+  });
+
+  final String userId;
+  final String email;
+  final TwoFactorMethod method;
+  final String? factorId; // Requerido cuando method == TwoFactorMethod.app
+}

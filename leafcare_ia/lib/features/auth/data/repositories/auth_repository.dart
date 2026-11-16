@@ -1,3 +1,5 @@
+import 'package:leafcare_ia/features/auth/data/models/auth_user_model.dart';
+
 /// Resultado limpio de una operación de autenticación.
 class AuthResult {
   const AuthResult({
@@ -28,6 +30,21 @@ class AuthFailureException implements Exception {
 abstract class AuthRepository {
   /// Inicia sesión con correo y contraseña.
   Future<AuthResult> login({required String email, required String password});
+
+  /// Revisa si el usuario requiere verificación en dos pasos tras validar su clave.
+  Future<TwoFactorChallenge?> checkTwoFactorRequirement({
+    required String userId,
+    required String email,
+  });
+
+  /// Verifica el código de 6 dígitos (App Autenticadora o Correo).
+  Future<void> verifyTwoFactorCode({
+    required TwoFactorChallenge challenge,
+    required String code,
+  });
+
+  /// Reenvía el código de 6 dígitos al correo electrónico.
+  Future<void> resendTwoFactorEmailCode(String email);
 
   /// Registra una cuenta nueva y dispara el correo de confirmación.
   Future<AuthResult> register({

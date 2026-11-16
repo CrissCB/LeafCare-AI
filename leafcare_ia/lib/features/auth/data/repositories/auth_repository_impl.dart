@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:leafcare_ia/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:leafcare_ia/features/auth/data/models/auth_user_model.dart';
 import 'package:leafcare_ia/features/auth/data/repositories/auth_repository.dart';
 
 /// Objeto limpio que recibe tu BLoC/UI sin depender de `supabase_flutter`.
@@ -45,6 +46,63 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<TwoFactorChallenge?> checkTwoFactorRequirement({
+    required String userId,
+    required String email,
+  }) async {
+    try {
+      return await remoteDatasource.checkTwoFactorRequirement(
+        userId: userId,
+        email: email,
+      );
+    } on AuthException catch (e) {
+      throw _mapAuthException(e);
+    } on SocketException {
+      throw const AuthFailureException('Sin conexión a internet.');
+    } catch (_) {
+      throw const AuthFailureException(
+        'No se pudo verificar la seguridad de la cuenta.',
+      );
+    }
+  }
+
+  @override
+  Future<void> verifyTwoFactorCode({
+    required TwoFactorChallenge challenge,
+    required String code,
+  }) async {
+    try {
+      await remoteDatasource.verifyTwoFactorCode(
+        challenge: challenge,
+        code: code,
+      );
+    } on AuthException catch (e) {
+      throw _mapAuthException(e);
+    } on SocketException {
+      throw const AuthFailureException('Sin conexión a internet.');
+    } catch (_) {
+      throw const AuthFailureException(
+        'Código inválido o expirado. Inténtalo de nuevo.',
+      );
+    }
+  }
+
+  @override
+  Future<void> resendTwoFactorEmailCode(String email) async {
+    try {
+      await remoteDatasource.resendTwoFactorEmailCode(email);
+    } on AuthException catch (e) {
+      throw _mapAuthException(e);
+    } on SocketException {
+      throw const AuthFailureException('Sin conexión a internet.');
+    } catch (_) {
+      throw const AuthFailureException(
+        'No se pudo reenviar el código de verificación.',
+      );
+    }
+  }
+
+  @override
   Future<AuthResult> register({
     required String name,
     required String email,
@@ -67,7 +125,6 @@ class AuthRepositoryImpl implements AuthRepository {
       return AuthResult(
         userId: user.id,
         email: user.email ?? email.trim(),
-        // En Supabase, si "Confirm email" está activo, session llega en null
         requiresEmailVerification: response.session == null,
       );
     } on AuthException catch (e) {

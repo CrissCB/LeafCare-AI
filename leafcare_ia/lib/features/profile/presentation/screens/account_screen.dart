@@ -1,15 +1,18 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
 import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/core/widgets/loading_indicator.dart';
-import 'package:leafcare_ia/core/widgets/sub_page_header.dart';
-import 'package:leafcare_ia/features/profile/data/datasources/account_datasource.dart';
-import 'package:leafcare_ia/features/profile/data/models/account_model.dart';
+import 'package:leafcare_ia/features/profile/data/datasources/profile_datasource.dart';
+import 'package:leafcare_ia/features/profile/data/models/user_profile_model.dart';
+import 'package:leafcare_ia/features/profile/presentation/widgets/account_widgets.dart';
 
-/// Pantalla "Mi cuenta": permite cambiar el nombre y la contraseña.
+/// Subpantalla de identidad del usuario (`/account`).
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -18,18 +21,24 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  final AccountDatasource _datasource = AccountDatasource(
+  final ProfileDatasource _datasource = ProfileDatasource(
     supabaseClient: const AppSupabaseClient(),
   );
-  final TextEditingController _nameController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
 
-  late Future<AccountModel> _accountFuture;
-  bool _savingName = false;
+  late Future<UserProfileModel> _profileFuture;
+  bool _initializedForm = false;
+
+  Uint8List? _selectedAvatarBytes;
+  String _selectedAvatarExt = 'jpg';
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _accountFuture = _load();
+    _profileFuture = _datasource.fetchProfile();
   }
 
   @override
@@ -38,26 +47,21 @@ class _AccountScreenState extends State<AccountScreen> {
     super.dispose();
   }
 
-  /// Pide los datos al servidor y llena el campo del nombre.
-  Future<AccountModel> _load() async {
-    final account = await _datasource.fetchAccount();
-    _nameController.text = account.name;
-    return account;
-  }
-
   void _reload() {
     setState(() {
-      _accountFuture = _load();
+      _initializedForm = false;
+      _selectedAvatarBytes = null;
+      _profileFuture = _datasource.fetchProfile();
     });
   }
 
-  void _snack(String message, {bool error = false}) {
+  void _snack(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: error ? AppColors.error : AppColors.primary,
+          backgroundColor: isError ? AppColors.error : AppColors.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -66,39 +70,142 @@ class _AccountScreenState extends State<AccountScreen> {
       );
   }
 
-  /// Guarda el nombre nuevo en PocketBase.
-  Future<void> _saveName() async {
-    final name = _nameController.text.trim();
+  Future<void> _showAvatarSourceSheet() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Cambiar foto de perfil',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.anthracite,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'JPG, PNG o WEBP · Tamaño máximo 15 MB',
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  color: AppColors.slateLight,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                leading: const Icon(
+                  Icons.photo_library_outlined,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Elegir de la galería'),
+                onTap: () => Navigator.pop(sheetCtx, ImageSource.gallery),
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                leading: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Tomar una foto'),
+                onTap: () => Navigator.pop(sheetCtx, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
-    if (name.length < 2) {
-      _snack('Escribe un nombre de al menos 2 letras', error: true);
-      return;
-    }
+    if (source == null || !mounted) return;
+    await _pickAndValidateImage(source);
+  }
 
-    setState(() => _savingName = true);
-
+  Future<void> _pickAndValidateImage(ImageSource source) async {
     try {
-      await _datasource.updateName(name);
+      final picked = await _picker.pickImage(source: source, imageQuality: 88);
+      if (picked == null || !mounted) return;
+
+      final bytes = await picked.readAsBytes();
       if (!mounted) return;
-      _snack('Nombre actualizado correctamente');
-      _reload();
+
+      // Validación estricta de límite máximo de 15 MB
+      if (bytes.lengthInBytes > ProfileDatasource.maxAvatarBytes) {
+        final sizeMb = (bytes.lengthInBytes / (1024 * 1024)).toStringAsFixed(1);
+        _snack(
+          'La imagen pesa $sizeMb MB y supera el límite de 15 MB.',
+          isError: true,
+        );
+        return;
+      }
+
+      final parts = picked.name.split('.');
+      final ext = parts.length > 1 ? parts.last.toLowerCase() : 'jpg';
+
+      setState(() {
+        _selectedAvatarBytes = bytes;
+        _selectedAvatarExt = ext;
+      });
     } catch (_) {
-      if (!mounted) return;
-      _snack('No se pudo guardar el nombre', error: true);
-    } finally {
-      if (mounted) setState(() => _savingName = false);
+      if (mounted) {
+        _snack('No se pudo cargar la imagen seleccionada.', isError: true);
+      }
     }
   }
 
-  /// Abre la ventana para cambiar la contraseña.
-  Future<void> _openPasswordDialog() async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => _ChangePasswordDialog(datasource: _datasource),
-    );
+  Future<void> _saveChanges(UserProfileModel profile) async {
+    if (profile.isGoogleAccount || _isSaving) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    if (saved == true && mounted) {
-      _snack('Contraseña actualizada correctamente');
+    final newName = _nameController.text.trim();
+    final hasNameChange = newName != profile.name;
+    final hasAvatarChange = _selectedAvatarBytes != null;
+
+    if (!hasNameChange && !hasAvatarChange) {
+      _snack('No hay cambios pendientes por guardar.');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      await _datasource.updateProfileDetails(
+        name: newName,
+        avatarBytes: _selectedAvatarBytes,
+        fileExtension: _selectedAvatarExt,
+      );
+
+      if (!mounted) return;
+      _snack('Datos de cuenta actualizados');
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      _snack(msg, isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -106,525 +213,189 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.pageBg,
-      body: FutureBuilder<AccountModel>(
-        future: _accountFuture,
+      body: FutureBuilder<UserProfileModel>(
+        future: _profileFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingIndicator();
           }
 
           if (snapshot.hasError || !snapshot.hasData) {
-            return SafeArea(
-              child: Column(
-                children: [
-                  const SubPageHeader(
-                    title: 'Mi cuenta',
-                    icon: Icons.person_outline_rounded,
-                  ),
-                  Expanded(
-                    child: EmptyStateView(
-                      icon: Icons.person_off_rounded,
-                      title: 'No se pudo cargar tu cuenta',
-                      subtitle: 'Revisa tu conexión e inténtalo de nuevo.',
-                      onRetry: _reload,
-                    ),
-                  ),
-                ],
-              ),
+            return EmptyStateView(
+              icon: Icons.person_off_rounded,
+              title: 'No se pudo cargar tu cuenta',
+              subtitle: 'Revisa tu conexión e inténtalo de nuevo.',
+              onRetry: _reload,
             );
           }
 
-          final account = snapshot.data!;
+          final profile = snapshot.data!;
+          if (!_initializedForm) {
+            _nameController.text = profile.name;
+            _initializedForm = true;
+          }
 
-          return CustomScrollView(
-            slivers: [
-              const SliverToBoxAdapter(
-                child: SubPageHeader(
-                  title: 'Mi cuenta',
-                  subtitle: 'Actualiza tu nombre y tu contraseña.',
-                  icon: Icons.person_outline_rounded,
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _AccountSummary(account: account),
-                      const SizedBox(height: 22),
-                      _SectionLabel('Datos personales'),
-                      const SizedBox(height: 10),
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Nombre',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.slate,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _nameController,
-                              textCapitalization: TextCapitalization.words,
-                              decoration: const InputDecoration(
-                                hintText: 'Tu nombre',
-                                prefixIcon: Icon(
-                                  Icons.badge_outlined,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: _savingName ? null : _saveName,
-                                icon: _savingName
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColors.white,
-                                        ),
-                                      )
-                                    : const Icon(Icons.save_rounded, size: 18),
-                                label: Text(
-                                  _savingName
-                                      ? 'Guardando...'
-                                      : 'Guardar cambios',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _SectionLabel('Correo electrónico'),
-                      const SizedBox(height: 10),
-                      _Card(
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                color: AppColors.mint,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.mail_outline_rounded,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    account.email.isEmpty
-                                        ? 'Sin correo'
-                                        : account.email,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.anthracite,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'El correo no se puede cambiar desde aquí.',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      color: AppColors.slateLight,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _SectionLabel('Contraseña'),
-                      const SizedBox(height: 10),
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Usa una contraseña segura que no compartas con nadie.',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                height: 1.4,
-                                color: AppColors.slate,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _openPasswordDialog,
-                                icon: const Icon(
-                                  Icons.lock_reset_rounded,
-                                  size: 18,
-                                ),
-                                label: const Text('Cambiar contraseña'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.primary,
-                                  side: const BorderSide(
-                                    color: AppColors.inputBorder,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+          final isGoogle = profile.isGoogleAccount;
 
-/// Tarjeta verde con el avatar, el nombre y el correo.
-class _AccountSummary extends StatelessWidget {
-  const _AccountSummary({required this.account});
-
-  final AccountModel account;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.heroMid, AppColors.heroEnd],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: AppColors.white.withValues(alpha: 0.16),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.white.withValues(alpha: 0.35),
-                width: 2,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                account.initial,
-                style: GoogleFonts.outfit(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.white,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
+          return SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  account.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.white,
-                  ),
+                AccountHeroHeader(
+                  profile: profile,
+                  previewAvatarBytes: _selectedAvatarBytes,
+                  onPickAvatar: isGoogle ? null : _showAvatarSourceSheet,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  account.email,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.white.withValues(alpha: 0.78),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isGoogle) ...[
+                          const GoogleManagedAccountBanner(),
+                          const SizedBox(height: 18),
+                        ],
+
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 8),
+                          child: Text(
+                            'DATOS DE IDENTIDAD',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: AppColors.slate,
+                            ),
+                          ),
+                        ),
+
+                        // Tarjeta blanca de información
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Nombre completo',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.anthracite,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _nameController,
+                                enabled: !isGoogle && !_isSaving,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(
+                                    Icons.person_outline_rounded,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: isGoogle
+                                      ? const Icon(
+                                          Icons.lock_outline_rounded,
+                                          size: 18,
+                                          color: AppColors.slateLight,
+                                        )
+                                      : null,
+                                  hintText: 'Tu nombre',
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Ingresa tu nombre';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              Text(
+                                'Correo electrónico',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.anthracite,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                initialValue: profile.email,
+                                enabled: false,
+                                decoration: const InputDecoration(
+                                  prefixIcon: Icon(
+                                    Icons.email_outlined,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: Icon(
+                                    Icons.lock_outline_rounded,
+                                    size: 18,
+                                    color: AppColors.slateLight,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Botón Guardar cambios (solo visible para cuentas con correo)
+                        if (!isGoogle) ...[
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => _saveChanges(profile),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: AppColors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 15,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: _isSaving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        color: AppColors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      'Guardar cambios',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _Chip(text: 'Cuenta con ${account.providerLabel}'),
-                    if (account.memberSince != null)
-                      _Chip(text: 'Desde ${_monthYear(account.memberSince!)}'),
-                  ],
                 ),
               ],
             ),
-          ),
-        ],
+          );
+        },
       ),
-    );
-  }
-
-  String _monthYear(DateTime date) {
-    const months = [
-      'ene',
-      'feb',
-      'mar',
-      'abr',
-      'may',
-      'jun',
-      'jul',
-      'ago',
-      'sep',
-      'oct',
-      'nov',
-      'dic',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-}
-
-/// Etiqueta pequeña y semitransparente sobre el fondo verde.
-class _Chip extends StatelessWidget {
-  const _Chip({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: GoogleFonts.outfit(
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          color: AppColors.white,
-        ),
-      ),
-    );
-  }
-}
-
-/// Título pequeño que separa las secciones.
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: GoogleFonts.outfit(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: AppColors.anthracite,
-      ),
-    );
-  }
-}
-
-/// Tarjeta blanca con borde, usada para agrupar campos.
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: child,
-    );
-  }
-}
-
-/// Ventana para cambiar la contraseña con validaciones en español.
-class _ChangePasswordDialog extends StatefulWidget {
-  const _ChangePasswordDialog({required this.datasource});
-
-  final AccountDatasource datasource;
-
-  @override
-  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
-}
-
-class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _currentController = TextEditingController();
-  final _newController = TextEditingController();
-  final _confirmController = TextEditingController();
-
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _currentController.dispose();
-    _newController.dispose();
-    _confirmController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-
-    try {
-      await widget.datasource.changePassword(
-        oldPassword: _currentController.text,
-        newPassword: _newController.text,
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.message.isNotEmpty
-            ? 'No se pudo cambiar: ${error.message}'
-            : 'La contraseña actual no es correcta o expiró la sesión.';
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'No se pudo cambiar la contraseña. Inténtalo de nuevo.';
-      });
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        'Cambiar contraseña',
-        style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-      ),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _currentController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña actual',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Escribe tu contraseña actual';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _newController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña nueva',
-                ),
-                validator: (value) {
-                  if (value == null || value.length < 8) {
-                    return 'Debe tener al menos 8 caracteres';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _confirmController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Repite la contraseña nueva',
-                ),
-                validator: (value) {
-                  if (value != _newController.text) {
-                    return 'Las contraseñas no coinciden';
-                  }
-                  return null;
-                },
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.error,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.white,
-                  ),
-                )
-              : const Text('Guardar'),
-        ),
-      ],
     );
   }
 }
