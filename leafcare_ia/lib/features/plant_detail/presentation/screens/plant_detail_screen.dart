@@ -8,6 +8,7 @@ import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/features/plant_detail/data/datasources/plant_remote_datasource.dart';
 import 'package:leafcare_ia/features/plant_detail/data/models/plant_detail_model.dart';
+import 'package:leafcare_ia/features/scanner/data/models/scanner_models.dart';
 import 'package:leafcare_ia/features/plant_detail/data/repositories/plant_repository.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/bloc/plant_detail_bloc.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/widgets/edit_plant_dialog.dart';
@@ -152,7 +153,14 @@ class PlantDetailScreen extends StatelessWidget {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton.icon(
-                            onPressed: () => context.push('/scan'),
+                            onPressed: () => context.go(
+                              '/scan',
+                              extra: ScannerRouteArgs(
+                                initialMode: ScanMode.healthDiagnosis,
+                                initialGroupId: plant.groupId,
+                                initialPlantId: plant.id,
+                              ),
+                            ),
                             icon: const Icon(
                               Icons.photo_camera_outlined,
                               color: AppColors.neon,

@@ -22,6 +22,7 @@ import 'package:leafcare_ia/features/plants/presentation/screens/plants_screen.d
 import 'package:leafcare_ia/features/plant_detail/presentation/screens/plant_detail_screen.dart';
 // Scanner imports
 import 'package:leafcare_ia/features/scanner/presentation/screens/scanner_screen.dart';
+import 'package:leafcare_ia/features/scanner/data/models/scanner_models.dart';
 // Alerts imports
 import 'package:leafcare_ia/features/alerts/presentation/screens/alerts_screen.dart';
 import 'package:leafcare_ia/features/alerts/presentation/bloc/alerts_bloc.dart';
@@ -187,7 +188,13 @@ GoRouter createRouter(AuthBloc authBloc) {
             routes: [
               GoRoute(
                 path: '/scan',
-                builder: (context, state) => const ScanScreen(),
+                name: 'scan',
+                builder: (context, state) {
+                  final args = state.extra is ScannerRouteArgs
+                      ? state.extra as ScannerRouteArgs
+                      : null;
+                  return ScannerScreen(key: ObjectKey(args), args: args);
+                },
               ),
             ],
           ),

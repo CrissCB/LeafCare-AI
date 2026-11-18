@@ -47,6 +47,8 @@ dependencies:
   # Cámara y Multimedia
   image_picker: ^1.2.4            # Captura desde cámara o galería (Soporta Web y Mobile)
   cached_network_image: ^4.0.5    # Carga eficiente de imágenes S3 Cloudflare R2 con cache
+  permission_handler: ^13.0.2
+  flutter_image_compress: ^2.5.1
 
   # Visualización de Datos e Interfaz
   fl_chart: ^1.3.0                # Gráfico de líneas para el historial de salud (Módulo 03)
@@ -86,6 +88,7 @@ flutter:
   # No se sube a Git: cada quien debe tener su propio .env
   assets:
     - .env
+    - assets/data/perenual_index.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -12,6 +12,28 @@ class HealthStatusColors {
   static const String criticalHex = '#EF4444'; // Enferma / Crítico
   static const String unevaluatedHex = '#64748B'; // Sin evaluar
 
+  /// Devuelve el HEX canónico según el puntaje de salud (`1..100`).
+  static String hexFromHealthScore(int healthScore) {
+    if (healthScore >= 75) return healthyHex;
+    if (healthScore >= 45) return attentionHex;
+    return criticalHex;
+  }
+
+  /// Devuelve la descripción/etiqueta estándar asociada al color HEX.
+  static String labelFromHex(String? hex) {
+    switch (hex?.trim().toUpperCase()) {
+      case healthyHex:
+        return 'Saludable';
+      case attentionHex:
+        return 'Requiere atención';
+      case criticalHex:
+        return 'Enferma / Crítico';
+      case unevaluatedHex:
+      default:
+        return 'Sin evaluar';
+    }
+  }
+
   /// Convierte un string hexadecimal (`#RRGGBB` o `#AARRGGBB`) en un [Color].
   static Color fromHex(String? hex, {Color fallback = AppColors.slate}) {
     if (hex == null || hex.trim().isEmpty) return fallback;
