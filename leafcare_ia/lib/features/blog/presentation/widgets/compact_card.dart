@@ -44,7 +44,7 @@ class CompactCard extends StatelessWidget {
                   ? Image.network(
                       article.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         color: AppColors.mint,
                         child: const Icon(
                           Icons.eco_rounded,

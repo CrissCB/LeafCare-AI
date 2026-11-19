@@ -8,22 +8,14 @@ import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
 import 'package:leafcare_ia/features/blog/data/models/article_model.dart';
 import 'package:leafcare_ia/features/blog/presentation/bloc/blog_bloc.dart';
 import 'package:leafcare_ia/features/blog/presentation/widgets/blog_header.dart';
+import 'package:leafcare_ia/features/blog/presentation/widgets/blog_shimmer.dart';
 import 'package:leafcare_ia/features/blog/presentation/widgets/compact_card.dart';
 import 'package:leafcare_ia/features/blog/presentation/widgets/hero_card.dart';
-import 'package:leafcare_ia/features/blog/presentation/widgets/blog_shimmer.dart';
 
-class BlogScreen extends StatefulWidget {
+class BlogScreen extends StatelessWidget {
   const BlogScreen({super.key});
 
-  @override
-  State<BlogScreen> createState() => _BlogScreenState();
-}
-
-class _BlogScreenState extends State<BlogScreen> {
-  String _selectedCategory = 'Todos';
-  String _searchQuery = '';
-
-  void _snack(String message, {bool error = false}) {
+  void _snack(BuildContext context, String message, {bool error = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -38,33 +30,14 @@ class _BlogScreenState extends State<BlogScreen> {
       );
   }
 
-  Future<void> _openArticle(ArticleModel article) async {
+  Future<void> _openArticle(BuildContext context, ArticleModel article) async {
     final uri = Uri.tryParse(article.link);
     if (uri == null ||
         !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) _snack('No se pudo abrir el artículo', error: true);
-    }
-  }
-
-  List<ArticleModel> _filterArticles(List<ArticleModel> articles) {
-    return articles.where((article) {
-      final matchesSearch =
-          article.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          article.description.toLowerCase().contains(
-            _searchQuery.toLowerCase(),
-          );
-
-      bool matchesCategory = true;
-      if (_selectedCategory == 'Guardados') {
-        matchesCategory = article.saved;
-      } else if (_selectedCategory != 'Todos') {
-        matchesCategory =
-            article.category.trim().toLowerCase() ==
-            _selectedCategory.trim().toLowerCase();
+      if (context.mounted) {
+        _snack(context, 'No se pudo abrir el artículo', error: true);
       }
-
-      return matchesSearch && matchesCategory;
-    }).toList();
+    }
   }
 
   @override
@@ -72,50 +45,36 @@ class _BlogScreenState extends State<BlogScreen> {
     return Scaffold(
       backgroundColor: AppColors.pageBg,
       body: BlocConsumer<BlogBloc, BlogState>(
-        listenWhen: (_, current) =>
-            current is BlogLoaded && current.notice != null,
+        listenWhen: (previous, current) =>
+            current is BlogLoaded &&
+            current.notice != null &&
+            previous != current,
         listener: (context, state) {
           if (state is BlogLoaded && state.notice != null) {
-            _snack(state.notice!, error: state.noticeIsError);
+            _snack(context, state.notice!, error: state.noticeIsError);
           }
         },
         builder: (context, state) {
-          List<String> categories = const ['Todos', 'Guardados'];
-          List<ArticleModel> articles = const [];
-
-          // Extraer categorías dinámicamente cuando el BLoC entrega los artículos
-          if (state is BlogLoaded) {
-            final rawArticles = state.articles;
-
-            final rssCategories = rawArticles
-                .map((a) => a.category.trim())
-                .where((c) => c.isNotEmpty)
-                .toSet()
-                .toList();
-
-            categories = ['Todos', ...rssCategories, 'Guardados'];
-            articles = _filterArticles(rawArticles);
-
-            // Respaldo por si se actualizan los datos y la categoría seleccionada ya no existe
-            if (!categories.contains(_selectedCategory)) {
-              _selectedCategory = 'Todos';
-            }
-          }
+          final isLoaded = state is BlogLoaded;
+          final categories = isLoaded
+              ? state.categories
+              : const ['Todos', 'Guardados'];
+          final selectedCategory = isLoaded ? state.selectedCategory : 'Todos';
 
           return Column(
             children: [
-              // Cabecera Verde con Buscador y Categorías Dinámicas
+              // Cabecera Verde con Buscador y Categorías gestionadas por el BLoC
               BlogHeader(
                 categories: categories,
-                selectedCategory: _selectedCategory,
+                selectedCategory: selectedCategory,
                 onCategorySelected: (cat) =>
-                    setState(() => _selectedCategory = cat),
+                    context.read<BlogBloc>().add(BlogCategorySelected(cat)),
                 onSearchChanged: (query) =>
-                    setState(() => _searchQuery = query),
+                    context.read<BlogBloc>().add(BlogSearchQueryChanged(query)),
               ),
 
               // Contenido Principal
-              Expanded(child: _buildBody(context, state, articles)),
+              Expanded(child: _buildBody(context, state)),
             ],
           );
         },
@@ -123,11 +82,7 @@ class _BlogScreenState extends State<BlogScreen> {
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    BlogState state,
-    List<ArticleModel> articles,
-  ) {
+  Widget _buildBody(BuildContext context, BlogState state) {
     if (state is BlogLoading || state is BlogInitial) {
       return const BlogShimmer();
     }
@@ -141,41 +96,99 @@ class _BlogScreenState extends State<BlogScreen> {
       );
     }
 
-    if (articles.isEmpty) {
-      return EmptyStateView(
-        icon: Icons.eco_outlined,
-        title: 'No encontramos artículos',
-        subtitle: _selectedCategory == 'Guardados'
-            ? 'Aún no has guardado ningún artículo en tu cuenta.'
-            : 'Intenta con otros términos de búsqueda o categorías.',
-        onRetry: () => context.read<BlogBloc>().add(BlogRefreshed()),
+    if (state is BlogLoaded) {
+      final articles = state.articles;
+
+      if (articles.isEmpty) {
+        return EmptyStateView(
+          icon: Icons.eco_outlined,
+          title: 'No encontramos artículos',
+          subtitle: state.selectedCategory == 'Guardados'
+              ? 'Aún no has guardado ningún artículo en tu cuenta.'
+              : 'Intenta con otros términos de búsqueda o categorías.',
+          onRetry: () => context.read<BlogBloc>().add(BlogRefreshed()),
+        );
+      }
+
+      return RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          final bloc = context.read<BlogBloc>();
+          bloc.add(BlogRefreshed());
+          await bloc.stream.firstWhere(
+            (s) => s is BlogLoaded || s is BlogError,
+          );
+        },
+        child: _BlogArticlesList(
+          articles: articles,
+          savingArticleIds: state.savingArticleIds,
+          onOpenArticle: (article) => _openArticle(context, article),
+          onToggleSave: (article) =>
+              context.read<BlogBloc>().add(BlogSaveToggled(article)),
+        ),
       );
     }
 
-    return RefreshIndicator(
-      color: AppColors.primary,
-      onRefresh: () async {
-        context.read<BlogBloc>().add(BlogRefreshed());
-        await context.read<BlogBloc>().stream.firstWhere(
-          (s) => s is BlogLoaded || s is BlogError,
-        );
-      },
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        itemCount: articles.length,
-        itemBuilder: (context, index) {
-          final article = articles[index];
-          void onSave() =>
-              context.read<BlogBloc>().add(BlogSaveToggled(article));
-          void onOpen() => _openArticle(article);
+    return const SizedBox.shrink();
+  }
+}
 
-          // Primera tarjeta destacada (Hero)
-          if (index == 0) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+// =========================================================================
+// LISTA DE ARTÍCULOS (WIDGET DE PRESENTACIÓN PURO)
+// =========================================================================
+
+class _BlogArticlesList extends StatelessWidget {
+  const _BlogArticlesList({
+    required this.articles,
+    required this.savingArticleIds,
+    required this.onOpenArticle,
+    required this.onToggleSave,
+  });
+
+  final List<ArticleModel> articles;
+  final Set<String> savingArticleIds;
+  final ValueChanged<ArticleModel> onOpenArticle;
+  final ValueChanged<ArticleModel> onToggleSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      itemCount: articles.length,
+      itemBuilder: (context, index) {
+        final article = articles[index];
+        final isSaving = savingArticleIds.contains(article.id);
+
+        void handleSave() {
+          if (!isSaving) onToggleSave(article);
+        }
+
+        void handleOpen() => onOpenArticle(article);
+
+        // Primera tarjeta destacada (Hero)
+        if (index == 0) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'ARTÍCULO DEL DÍA',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.slate,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              HeroCard(
+                article: article,
+                onOpen: handleOpen,
+                onSave: handleSave,
+              ),
+              if (articles.length > 1) ...[
+                const SizedBox(height: 20),
                 Text(
-                  'ARTÍCULO DEL DÍA',
+                  'MÁS ARTÍCULOS',
                   style: GoogleFonts.outfit(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -184,34 +197,20 @@ class _BlogScreenState extends State<BlogScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                HeroCard(article: article, onOpen: onOpen, onSave: onSave),
-                if (articles.length > 1) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    'MÁS ARTÍCULOS',
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.slate,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
               ],
-            );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: CompactCard(
-              article: article,
-              onOpen: onOpen,
-              onSave: onSave,
-            ),
+            ],
           );
-        },
-      ),
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: CompactCard(
+            article: article,
+            onOpen: handleOpen,
+            onSave: handleSave,
+          ),
+        );
+      },
     );
   }
 }

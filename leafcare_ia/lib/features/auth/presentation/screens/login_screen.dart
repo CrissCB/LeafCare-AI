@@ -10,6 +10,7 @@ import 'package:leafcare_ia/core/widgets/leaf_logo.dart';
 import 'package:leafcare_ia/features/auth/presentation/widgets/social_button.dart';
 import 'package:leafcare_ia/features/auth/presentation/widgets/auth_layout.dart';
 import 'package:leafcare_ia/features/auth/presentation/widgets/auth_footer.dart';
+import 'package:leafcare_ia/features/auth/presentation/widgets/login_two_factor_card.dart';
 import 'package:leafcare_ia/features/auth/presentation/bloc/auth_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -75,122 +76,149 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const _LoginHeader(),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Iniciar Sesión',
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.anthracite,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // CAMPO DE CORREO
-                    CustomTextField(
-                      label: 'Correo Electrónico',
-                      controller: _emailController,
-                      focusNode: _emailFocus,
-                      icon: Icons.mail_outline_rounded,
-                      hint: 'usuario@email.com',
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.email],
-                      onSubmitted: (_) => _passwordFocus.requestFocus(),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // CAMPO DE CONTRASEÑA
-                    CustomTextField(
-                      label: 'Contraseña',
-                      controller: _passwordController,
-                      focusNode: _passwordFocus,
-                      icon: Icons.lock_outline_rounded,
-                      hint: '••••••••',
-                      obscure: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      onSubmitted: (_) => _onLoginPressed(),
-                      suffix: GestureDetector(
-                        onTap: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        child: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          size: 18,
-                          color: AppColors.slateLight,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ¿OLVIDASTE TU CONTRASEÑA?
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: GestureDetector(
-                        onTap: () => _comingSoon('Recuperar contraseña'),
-                        child: Text(
-                          '¿Olvidaste tu contraseña?',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // BOTÓN INICIAR SESIÓN CON BLoC
-                    BlocConsumer<AuthBloc, AuthState>(
-                      listener: (context, state) {
-                        if (state is AuthenticatedState) {
-                          context.go('/dashboard');
-                        } else if (state is AuthErrorState) {
-                          _snack(state.message, error: true);
-                        }
-                      },
-                      builder: (context, state) {
-                        return CustomButton(
-                          label: 'Iniciar Sesión',
-                          loading: state is AuthLoadingState,
-                          onTap: state is AuthLoadingState
-                              ? null
-                              : _onLoginPressed,
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // BOTÓN DE GOOGLE
-                    SocialButton(
-                      label: 'Continuar con Google',
-                      onTap: () => _comingSoon('Continuar con Google'),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // FOOTER DE REGISTRO
-                    AuthFooter(
-                      questionText: '¿No tienes cuenta? ',
-                      actionText: 'Regístrate aquí',
-                      onTap: () => context.push(
-                        '/register',
-                      ), // Navega a la pantalla de registro
-                    ),
-                  ],
-                ),
+              child: BlocConsumer<AuthBloc, AuthState>(
+                listener: (context, state) {
+                  if (state is AuthenticatedState) {
+                    context.go('/dashboard');
+                  } else if (state is AuthErrorState) {
+                    _snack(state.message, error: true);
+                    if (state.isEmailNotConfirmed && state.email != null) {
+                      context.push('/verify-email', extra: state.email!);
+                    }
+                  }
+                },
+                builder: (context, state) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                    child: state is AuthTwoFactorRequired
+                        ? LoginTwoFactorCard(
+                            state: state,
+                            onVerify: (code) => context.read<AuthBloc>().add(
+                              AuthTwoFactorSubmitted(
+                                challenge: state.challenge,
+                                code: code,
+                              ),
+                            ),
+                            onResendEmail: () => context.read<AuthBloc>().add(
+                              AuthTwoFactorResendRequested(
+                                challenge: state.challenge,
+                              ),
+                            ),
+                            onCancel: () {
+                              _passwordController.clear();
+                              context.read<AuthBloc>().add(
+                                AuthTwoFactorCancelled(),
+                              );
+                            },
+                          )
+                        : _buildCredentialsForm(state),
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCredentialsForm(AuthState state) {
+    final isLoading = state is AuthLoadingState;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Iniciar Sesión',
+          style: GoogleFonts.outfit(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: AppColors.anthracite,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // CAMPO DE CORREO
+        CustomTextField(
+          label: 'Correo Electrónico',
+          controller: _emailController,
+          focusNode: _emailFocus,
+          icon: Icons.mail_outline_rounded,
+          hint: 'usuario@email.com',
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.email],
+          onSubmitted: (_) => _passwordFocus.requestFocus(),
+        ),
+        const SizedBox(height: 14),
+
+        // CAMPO DE CONTRASEÑA
+        CustomTextField(
+          label: 'Contraseña',
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          icon: Icons.lock_outline_rounded,
+          hint: '••••••••',
+          obscure: _obscurePassword,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.password],
+          onSubmitted: (_) => _onLoginPressed(),
+          suffix: GestureDetector(
+            onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+            child: Icon(
+              _obscurePassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 18,
+              color: AppColors.slateLight,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // ¿OLVIDASTE TU CONTRASEÑA?
+        Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: () => context.push(
+              '/forgot-password',
+              extra: _emailController.text.trim(),
+            ),
+            child: Text(
+              '¿Olvidaste tu contraseña?',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // BOTÓN INICIAR SESIÓN
+        CustomButton(
+          label: 'Iniciar Sesión',
+          loading: isLoading,
+          onTap: isLoading ? null : _onLoginPressed,
+        ),
+
+        const SizedBox(height: 12),
+
+        // BOTÓN DE GOOGLE
+        SocialButton(
+          label: 'Continuar con Google',
+          onTap: () => _comingSoon('Continuar con Google'),
+        ),
+        const SizedBox(height: 28),
+
+        // FOOTER DE REGISTRO
+        AuthFooter(
+          questionText: '¿No tienes cuenta? ',
+          actionText: 'Regístrate aquí',
+          onTap: () => context.push('/register'),
+        ),
+      ],
     );
   }
 }
@@ -237,7 +265,7 @@ class _LoginHeader extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center, // Cambiar a CrossAxisAlignment.start si deseas alinearlo a la izquierda
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
                     width: 72,

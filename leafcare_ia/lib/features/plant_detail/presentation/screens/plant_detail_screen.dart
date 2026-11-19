@@ -4,51 +4,63 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/core/widgets/empty_state_view.dart';
-
 import 'package:leafcare_ia/features/plant_detail/data/datasources/plant_remote_datasource.dart';
+import 'package:leafcare_ia/features/plant_detail/data/models/plant_detail_model.dart';
+import 'package:leafcare_ia/features/scanner/data/models/scanner_models.dart';
 import 'package:leafcare_ia/features/plant_detail/data/repositories/plant_repository.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/bloc/plant_detail_bloc.dart';
-import 'package:leafcare_ia/features/plant_detail/data/models/plant_detail_model.dart';
+import 'package:leafcare_ia/features/plant_detail/presentation/widgets/edit_plant_dialog.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/widgets/plant_care_card.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/widgets/plant_detail_hero.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/widgets/plant_health_timeline.dart';
 import 'package:leafcare_ia/features/plant_detail/presentation/widgets/plant_info_card.dart';
-import 'package:leafcare_ia/features/plant_detail/presentation/widgets/edit_plant_dialog.dart';
 
 class PlantDetailScreen extends StatelessWidget {
   const PlantDetailScreen({super.key, required this.plantId});
 
   final String plantId;
 
+  void _snack(BuildContext context, String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? AppColors.error : AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => PlantDetailBloc(
-        repository: const PlantRepository(datasource: PlantRemoteDatasource()),
+        repository: const PlantRepository(
+          datasource: PlantRemoteDatasource(
+            supabaseClient: AppSupabaseClient(),
+          ),
+        ),
       )..add(LoadPlantDetail(plantId)),
       child: Scaffold(
         backgroundColor: AppColors.pageBg,
         body: BlocConsumer<PlantDetailBloc, PlantDetailState>(
           listener: (context, state) {
             if (state is PlantDetailDeleted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Planta eliminada correctamente'),
-                  backgroundColor: AppColors.primary,
-                ),
-              );
+              _snack(context, 'Planta eliminada correctamente');
               context.pop(true);
             }
 
             if (state is PlantDetailLoaded && state.feedbackMessage != null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(state.feedbackMessage!),
-                  backgroundColor: state.isFeedbackError
-                      ? AppColors.error
-                      : AppColors.primary,
-                ),
+              _snack(
+                context,
+                state.feedbackMessage!,
+                isError: state.isFeedbackError,
               );
             }
           },
@@ -81,17 +93,12 @@ class PlantDetailScreen extends StatelessWidget {
                       child: RefreshIndicator(
                         color: AppColors.primary,
                         onRefresh: () async {
-                          context.read<PlantDetailBloc>().add(
-                            RefreshPlantDetail(plantId),
+                          final bloc = context.read<PlantDetailBloc>();
+                          bloc.add(RefreshPlantDetail(plantId));
+                          await bloc.stream.firstWhere(
+                            (s) =>
+                                s is PlantDetailLoaded || s is PlantDetailError,
                           );
-                          await context
-                              .read<PlantDetailBloc>()
-                              .stream
-                              .firstWhere(
-                                (s) =>
-                                    s is PlantDetailLoaded ||
-                                    s is PlantDetailError,
-                              );
                         },
                         child: SingleChildScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -99,6 +106,7 @@ class PlantDetailScreen extends StatelessWidget {
                             children: [
                               PlantDetailHero(
                                 plant: plant,
+                                groupIconName: plant.groupIconName,
                                 onMoreOptions: () =>
                                     _showOptionsSheet(context, plant),
                               ),
@@ -145,7 +153,14 @@ class PlantDetailScreen extends StatelessWidget {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton.icon(
-                            onPressed: () => context.push('/scan'),
+                            onPressed: () => context.go(
+                              '/scan',
+                              extra: ScannerRouteArgs(
+                                initialMode: ScanMode.healthDiagnosis,
+                                initialGroupId: plant.groupId,
+                                initialPlantId: plant.id,
+                              ),
+                            ),
                             icon: const Icon(
                               Icons.photo_camera_outlined,
                               color: AppColors.neon,
@@ -172,7 +187,6 @@ class PlantDetailScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-
                 if (loadedState.isProcessing)
                   Container(
                     color: Colors.black.withValues(alpha: 0.25),
@@ -199,18 +213,34 @@ class PlantDetailScreen extends StatelessWidget {
       ),
       builder: (bottomSheetContext) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 12),
               ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 leading: const Icon(
                   Icons.edit_outlined,
                   color: AppColors.primary,
                 ),
                 title: Text(
                   'Editar nombre o grupo',
-                  style: GoogleFonts.inter(fontSize: 14),
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.anthracite,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(bottomSheetContext);
@@ -218,6 +248,9 @@ class PlantDetailScreen extends StatelessWidget {
                 },
               ),
               ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 leading: const Icon(
                   Icons.delete_outline_rounded,
                   color: AppColors.error,
@@ -226,6 +259,7 @@ class PlantDetailScreen extends StatelessWidget {
                   'Eliminar planta',
                   style: GoogleFonts.inter(
                     fontSize: 14,
+                    fontWeight: FontWeight.w500,
                     color: AppColors.error,
                   ),
                 ),
@@ -269,6 +303,7 @@ class PlantDetailScreen extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
+              foregroundColor: AppColors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),

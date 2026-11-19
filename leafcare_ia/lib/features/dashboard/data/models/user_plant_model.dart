@@ -1,59 +1,63 @@
-import 'package:pocketbase/pocketbase.dart';
-
-/// Representa una planta que pertenece al usuario.
-///
-/// Se construye a partir de un registro de la colección `user_plants`
-/// de PocketBase.
 class UserPlantModel {
   const UserPlantModel({
     required this.id,
+    required this.userId,
+    this.groupId,
     required this.customName,
     required this.scientificName,
     required this.commonName,
-    required this.imageUrl,
-    required this.healthLabel,
-    required this.healthColorHex,
+    this.speciesOrigin,
+    this.externalSpeciesId,
+    this.primaryImageUrl,
+    required this.healthStatusLabel,
+    required this.healthStatusColor,
+    this.createdAt,
   });
 
-  /// Identificador del registro en PocketBase.
   final String id;
-
-  /// Nombre que el usuario le puso a su planta.
+  final String userId;
+  final String? groupId;
   final String customName;
-
-  /// Nombre científico (por ejemplo, Monstera deliciosa).
   final String scientificName;
-
-  /// Nombre común (por ejemplo, Costilla de Adán).
   final String commonName;
+  final String? speciesOrigin;
+  final String? externalSpeciesId;
+  final String? primaryImageUrl;
+  final String healthStatusLabel;
+  final String healthStatusColor;
+  final DateTime? createdAt;
 
-  /// Dirección de la foto principal (guardada en S3/R2).
-  final String imageUrl;
-
-  /// Etiqueta del estado de salud ("Saludable", "Necesita atención"...).
-  final String healthLabel;
-
-  /// Color del estado en formato hexadecimal ("#22C55E").
-  final String healthColorHex;
-
-  /// Convierte un registro de PocketBase en un objeto de la aplicación.
-  factory UserPlantModel.fromRecord(RecordModel record) {
-    final data = record.data;
-
+  factory UserPlantModel.fromJson(Map<String, dynamic> json) {
     return UserPlantModel(
-      id: record.id,
-      customName: _text(data['custom_name'], 'Mi planta'),
-      scientificName: _text(data['scientific_name'], ''),
-      commonName: _text(data['common_name'], ''),
-      imageUrl: _text(data['primary_image_url'], ''),
-      healthLabel: _text(data['health_status_label'], 'Sin evaluar'),
-      healthColorHex: _text(data['health_status_color'], '#64748B'),
+      id: json['id']?.toString() ?? '',
+      userId: json['user_id']?.toString() ?? '',
+      groupId: json['group_id']?.toString(),
+      customName: json['custom_name'] as String? ?? 'Mi planta',
+      scientificName: json['scientific_name'] as String? ?? '',
+      commonName: json['common_name'] as String? ?? '',
+      speciesOrigin: json['species_origin'] as String?,
+      externalSpeciesId: json['external_species_id']?.toString(),
+      primaryImageUrl: json['primary_image_url'] as String?,
+      healthStatusLabel: json['health_status_label'] as String? ?? 'Saludable',
+      healthStatusColor: json['health_status_color'] as String? ?? '#22C55E',
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 
-  /// Devuelve el texto limpio o el valor por defecto si viene vacío.
-  static String _text(Object? value, String fallback) {
-    final text = value?.toString().trim() ?? '';
-    return text.isEmpty ? fallback : text;
+  Map<String, dynamic> toJson() {
+    return {
+      'user_id': userId,
+      'group_id': groupId,
+      'custom_name': customName,
+      'scientific_name': scientificName,
+      'common_name': commonName,
+      'species_origin': speciesOrigin,
+      'external_species_id': externalSpeciesId,
+      'primary_image_url': primaryImageUrl,
+      'health_status_label': healthStatusLabel,
+      'health_status_color': healthStatusColor,
+    };
   }
 }

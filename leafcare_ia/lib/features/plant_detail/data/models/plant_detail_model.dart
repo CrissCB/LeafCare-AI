@@ -8,7 +8,9 @@ class PlantDetailModel {
     required this.scientificName,
     required this.commonName,
     required this.speciesOrigin,
+    this.groupId,
     required this.groupName,
+    this.groupIconName,
     required this.primaryImageUrl,
     required this.healthStatusLabel,
     required this.healthStatusColor,
@@ -29,11 +31,13 @@ class PlantDetailModel {
 
   // Atributos user_plants
   final String id;
+  final String? groupId;
   final String customName;
   final String scientificName;
   final String commonName;
   final String speciesOrigin;
   final String groupName;
+  final String? groupIconName;
   final String primaryImageUrl;
   final String healthStatusLabel;
   final String healthStatusColor;
@@ -51,34 +55,44 @@ class PlantDetailModel {
   // Lista de historiales
   final List<HealthScanModel> scanHistory;
 
-  factory PlantDetailModel.fromPocketBase({
+  factory PlantDetailModel.fromSupabase({
     required Map<String, dynamic> plantJson,
     required Map<String, dynamic> careJson,
     required List<HealthScanModel> scans,
   }) {
-    // Si usas expand para traer el nombre del grupo
-    String resolvedGroup = 'Sin grupo';
-    final expand = plantJson['expand'];
-    if (expand is Map<String, dynamic> && expand['group_id'] is Map) {
-      resolvedGroup = (expand['group_id']['name'] as String?) ?? 'Sin grupo';
+    String resolvedGroupName = 'Sin grupo';
+    String? resolvedGroupIcon;
+
+    // Supabase devuelve la relación bajo la clave del nombre de la tabla (`plant_groups`)
+    final groupData = plantJson['plant_groups'];
+    if (groupData is Map<String, dynamic>) {
+      final rawName = groupData['name']?.toString().trim();
+      if (rawName != null && rawName.isNotEmpty) {
+        resolvedGroupName = rawName;
+      }
+      resolvedGroupIcon = groupData['icon_name']?.toString();
     }
 
+    final rawCreated =
+        plantJson['created_at']?.toString() ?? plantJson['created']?.toString();
+
     return PlantDetailModel(
-      id: plantJson['id'] as String? ?? '',
+      id: plantJson['id']?.toString() ?? '',
+      groupId: plantJson['group_id']?.toString(),
       customName: plantJson['custom_name'] as String? ?? 'Mi Planta',
       scientificName: plantJson['scientific_name'] as String? ?? '',
       commonName: plantJson['common_name'] as String? ?? '',
       speciesOrigin:
           plantJson['species_origin'] as String? ?? 'No especificado',
-      groupName: resolvedGroup,
+      groupName: resolvedGroupName,
+      groupIconName: resolvedGroupIcon,
       primaryImageUrl: plantJson['primary_image_url'] as String? ?? '',
       healthStatusLabel:
-          plantJson['health_status_label'] as String? ?? 'Saludable',
+          plantJson['health_status_label'] as String? ?? 'Sin evaluar',
       healthStatusColor:
-          plantJson['health_status_color'] as String? ?? '#10B981',
+          plantJson['health_status_color'] as String? ?? '#64748B',
       createdAt:
-          DateTime.tryParse(plantJson['created'] as String? ?? '') ??
-          DateTime.now(),
+          DateTime.tryParse(rawCreated ?? '')?.toLocal() ?? DateTime.now(),
 
       wateringFrequencyDays:
           (careJson['watering_frequency_days'] as num?)?.toDouble() ?? 7.0,
@@ -93,6 +107,19 @@ class PlantDetailModel {
           careJson['fertilizer_characteristics'] as String? ?? 'Abono líquido',
 
       scanHistory: scans,
+    );
+  }
+
+  /// Alias temporal para mantener compatibilidad con `PlantRepository`.
+  factory PlantDetailModel.fromPocketBase({
+    required Map<String, dynamic> plantJson,
+    required Map<String, dynamic> careJson,
+    required List<HealthScanModel> scans,
+  }) {
+    return PlantDetailModel.fromSupabase(
+      plantJson: plantJson,
+      careJson: careJson,
+      scans: scans,
     );
   }
 }

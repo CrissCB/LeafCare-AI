@@ -1,69 +1,88 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart' as xml;
+
 import 'package:leafcare_ia/core/constants/api_constants.dart';
-import 'package:leafcare_ia/core/network/http_client.dart';
 import 'package:leafcare_ia/features/blog/data/models/article_model.dart';
 
 class RssBlogDatasource {
-  RssBlogDatasource({AppHttpClient? httpClient})
-    : _httpClient = httpClient ?? const AppHttpClient();
-
-  final AppHttpClient _httpClient;
+  RssBlogDatasource();
 
   Future<List<ArticleModel>> fetchArticles() async {
-    final uri = Uri.parse(
-      '${ApiConstants.rssToJasonUrl}${Uri.encodeComponent(ApiConstants.gardeningRssUrl)}',
-    );
+    try {
+      final response = await http
+          .get(
+            Uri.parse(ApiConstants.gardeningRssUrl),
+            headers: const {
+              'Accept': 'application/rss+xml, application/xml, text/xml',
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 14) LeafCareAI/1.0',
+            },
+          )
+          .timeout(const Duration(seconds: 12));
 
-    final json = await _httpClient.getJson(uri);
-    if (json['status'] != 'ok') {
-      throw Exception('No se pudieron cargar los artículos');
+      if (response.statusCode != 200) {
+        debugPrint('❌ [RSS] HTTP ${response.statusCode}');
+        return const [];
+      }
+
+      final rawXml = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final document = xml.XmlDocument.parse(rawXml);
+      final items = document.findAllElements('item');
+
+      return items
+          .map(_fromXmlItem)
+          .where((article) => article.id.isNotEmpty)
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('❌ [RSS] Error cargando feed: $e');
+      return const [];
     }
-
-    final items = json['items'];
-    if (items is! List) return const [];
-
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(_fromRssItem)
-        .toList(growable: false);
   }
 
-  ArticleModel _fromRssItem(Map<String, dynamic> item) {
-    final content = (item['content'] as String?) ?? '';
-    final description = (item['description'] as String?) ?? '';
-    final categories = item['categories'];
-    final category = categories is List && categories.isNotEmpty
-        ? '${categories.first}'
-        : 'Jardinería';
+  ArticleModel _fromXmlItem(xml.XmlElement node) {
+    final title =
+        node.findElements('title').firstOrNull?.innerText ?? 'Sin título';
+    final link = node.findElements('link').firstOrNull?.innerText.trim() ?? '';
+    final guid = node.findElements('guid').firstOrNull?.innerText.trim() ?? '';
+    final author =
+        node.findElements('dc:creator').firstOrNull?.innerText ?? 'Redacción';
+    final category =
+        node.findElements('category').firstOrNull?.innerText ?? 'Jardinería';
+    final descriptionRaw =
+        node.findElements('description').firstOrNull?.innerText ?? '';
+    final contentEncoded =
+        node.findElements('content:encoded').firstOrNull?.innerText ?? '';
 
-    String imageUrl = (item['thumbnail'] as String?)?.trim() ?? '';
+    final imageUrl =
+        _extractImageUrl(contentEncoded) ??
+        _extractImageUrl(descriptionRaw) ??
+        '';
 
-    if (imageUrl.isEmpty) {
-      imageUrl =
-          _extractImageUrl(content) ?? _extractImageUrl(description) ?? '';
-    }
-
-    final cleanDescription = description
+    final cleanDescription = descriptionRaw
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
+    final articleId = link.isNotEmpty ? link : guid;
+
     return ArticleModel(
-      id: (item['guid'] as String?)?.trim().isNotEmpty == true
-          ? item['guid'] as String
-          : (item['link'] as String? ?? ''),
-      title: (item['title'] as String?)?.trim() ?? 'Sin título',
-      author: (item['author'] as String?)?.trim().isNotEmpty == true
-          ? item['author'] as String
-          : 'Redacción',
-      category: category,
-      imageUrl: imageUrl,
-      readTime: _readTimeFrom(content),
-      link: (item['link'] as String?) ?? '',
+      id: articleId,
+      title: title.trim(),
+      author: author.trim(),
+      category: category.trim(),
+      imageUrl: imageUrl.trim(),
+      readTime: _readTimeFrom(
+        contentEncoded.isNotEmpty ? contentEncoded : descriptionRaw,
+      ),
+      link: articleId,
       description: cleanDescription,
     );
   }
 
   String? _extractImageUrl(String html) {
-    final regExp = RegExp(r'<img[^>]+src="([^">]+)"');
+    final regExp = RegExp(r'''<img[^>]+src=["']([^"']+)["']''');
     final match = regExp.firstMatch(html);
     return match?.group(1);
   }

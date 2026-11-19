@@ -1,6 +1,4 @@
-import 'package:pocketbase/pocketbase.dart';
-
-import 'package:leafcare_ia/core/network/pocketbase_client.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
 import 'package:leafcare_ia/features/blog/data/datasources/rss_blog_datasource.dart';
 import 'package:leafcare_ia/features/blog/data/models/article_model.dart';
 
@@ -9,78 +7,111 @@ class BlogAuthRequiredException implements Exception {
 }
 
 class BlogRepository {
-  BlogRepository({required this.rssDatasource});
+  BlogRepository({required this.rssDatasource, required this.supabaseClient});
 
   final RssBlogDatasource rssDatasource;
+  final AppSupabaseClient supabaseClient;
 
-  static const _collection = 'saved_blog_articles';
+  static const _table = 'saved_blog_articles';
 
+  SupabaseClient get _client => supabaseClient.client;
+
+  /// Obtiene los artículos del RSS y los cruza con los guardados en Supabase.
   Future<List<ArticleModel>> fetchArticles() async {
     final articles = await rssDatasource.fetchArticles();
-    final savedIds = await _savedExternalIds();
-    if (savedIds.isEmpty) return articles;
+    final savedMap = await _savedArticlesIndex();
+    if (savedMap.isEmpty) return articles;
 
     return articles
-        .map(
-          (article) => article.copyWith(saved: savedIds.contains(article.id)),
-        )
+        .map((article) {
+          final recordId = savedMap[article.id];
+          if (recordId == null) return article;
+          return article.copyWith(saved: true, savedRecordId: recordId);
+        })
         .toList(growable: false);
   }
 
+  /// Obtiene únicamente los artículos guardados por el usuario desde Supabase.
+  Future<List<ArticleModel>> fetchSavedArticles() async {
+    final userId = supabaseClient.currentUserId;
+    if (!supabaseClient.isAuthenticated || userId == null) {
+      return const [];
+    }
+
+    try {
+      final response = await _client
+          .from(_table)
+          .select()
+          .eq('user_id', userId)
+          .order('saved_at', ascending: false);
+
+      return (response as List<dynamic>)
+          .map((row) => ArticleModel.fromJson(row as Map<String, dynamic>))
+          .toList(growable: false);
+    } on PostgrestException {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Alterna el estado de guardado (Insertar/Upsert o Eliminar registro).
   Future<ArticleModel> toggleSave(ArticleModel article) async {
-    final pb = await PocketBaseClient.getInstance();
-    final userId = pb.authStore.record?.id;
-    if (!pb.authStore.isValid || userId == null) {
+    final userId = supabaseClient.currentUserId;
+    if (!supabaseClient.isAuthenticated || userId == null) {
       throw const BlogAuthRequiredException();
     }
 
     if (article.saved) {
-      final existing = await pb
-          .collection(_collection)
-          .getFirstListItem(
-            'external_article_id = "${_escape(article.id)}" && user_id = "$userId"',
-          );
-      await pb.collection(_collection).delete(existing.id);
-      return article.copyWith(saved: false);
+      await _client
+          .from(_table)
+          .delete()
+          .eq('external_article_id', article.id)
+          .eq('user_id', userId);
+
+      return article.copyWith(saved: false, clearSavedRecordId: true);
     }
 
-    await pb
-        .collection(_collection)
-        .create(
-          body: {
-            'external_article_id': article.id,
-            'title': article.title,
-            'author': article.author,
-            'category': article.category,
-            'image_url': article.imageUrl,
-            'read_time': article.readTime,
-            'user_id': userId,
-          },
-        );
-    return article.copyWith(saved: true);
+    final inserted = await _client
+        .from(_table)
+        .upsert(
+          article.toJson(userId),
+          onConflict: 'user_id,external_article_id',
+        )
+        .select('id')
+        .single();
+
+    return article.copyWith(
+      saved: true,
+      savedRecordId: inserted['id']?.toString(),
+    );
   }
 
-  Future<Set<String>> _savedExternalIds() async {
+  /// Mapa `{ external_article_id: record_uuid }` de los artículos guardados.
+  Future<Map<String, String>> _savedArticlesIndex() async {
     try {
-      final pb = await PocketBaseClient.getInstance();
-      final userId = pb.authStore.record?.id;
-      if (!pb.authStore.isValid || userId == null) return const {};
+      final userId = supabaseClient.currentUserId;
+      if (!supabaseClient.isAuthenticated || userId == null) return const {};
 
-      final records = await pb
-          .collection(_collection)
-          .getFullList(filter: 'user_id = "$userId"');
+      final response = await _client
+          .from(_table)
+          .select('id, external_article_id')
+          .eq('user_id', userId);
 
-      return records
-          .map((record) => record.get<String>('external_article_id', ''))
-          .where((id) => id.isNotEmpty)
-          .toSet();
-    } on ClientException {
+      final result = <String, String>{};
+      for (final row in response as List<dynamic>) {
+        final map = row as Map<String, dynamic>;
+        final externalId = map['external_article_id'] as String? ?? '';
+        final recordId = map['id']?.toString() ?? '';
+        if (externalId.isNotEmpty && recordId.isNotEmpty) {
+          result[externalId] = recordId;
+        }
+      }
+      return result;
+    } on PostgrestException {
       return const {};
     } catch (_) {
       return const {};
     }
   }
-
-  String _escape(String value) =>
-      value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:leafcare_ia/app/config/app_theme.dart';
+import 'package:leafcare_ia/core/network/supabase_client.dart';
+import 'package:leafcare_ia/core/utils/plant_group_icons.dart';
 import 'package:leafcare_ia/features/plant_detail/data/datasources/plant_remote_datasource.dart';
 import 'package:leafcare_ia/features/plant_detail/data/models/plant_detail_model.dart';
 import 'package:leafcare_ia/features/plant_detail/data/repositories/plant_repository.dart';
@@ -18,8 +20,9 @@ class EditPlantDialog extends StatefulWidget {
 
 class _EditPlantDialogState extends State<EditPlantDialog> {
   late final TextEditingController _nameController;
+
   final _repository = const PlantRepository(
-    datasource: PlantRemoteDatasource(),
+    datasource: PlantRemoteDatasource(supabaseClient: AppSupabaseClient()),
   );
 
   String? _selectedGroupId;
@@ -35,19 +38,19 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
   }
 
   Future<void> _loadGroups() async {
-    final groups = await _repository.getUserGroups();
-    if (!mounted) return;
+    try {
+      final groups = await _repository.getUserGroups();
+      if (!mounted) return;
 
-    setState(() {
-      _userGroups = groups;
-      final currentGroup = _userGroups
-          .where((g) => g['name'] == widget.plant.groupName)
-          .firstOrNull;
-      if (currentGroup != null) {
-        _selectedGroupId = currentGroup['id'] as String?;
-      }
-      _isLoadingGroups = false;
-    });
+      setState(() {
+        _userGroups = groups;
+        _selectedGroupId = widget.plant.groupId;
+        _isLoadingGroups = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingGroups = false);
+    }
   }
 
   @override
@@ -71,17 +74,17 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
     return Dialog(
       backgroundColor: AppColors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Editar Planta',
+              'Editar planta',
               style: GoogleFonts.outfit(
                 fontSize: 20,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
                 color: AppColors.anthracite,
               ),
             ),
@@ -99,6 +102,7 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
+              textCapitalization: TextCapitalization.sentences,
               onChanged: (_) {
                 if (_nameError != null) setState(() => _nameError = null);
               },
@@ -118,7 +122,7 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
             ),
             const SizedBox(height: 20),
 
-            // Selector único de grupo
+            // Selector único de grupo con su ícono correspondiente
             Text(
               'Grupo asignado',
               style: GoogleFonts.inter(
@@ -128,59 +132,70 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
               ),
             ),
             const SizedBox(height: 10),
-            _isLoadingGroups
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
+            if (_isLoadingGroups)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+              )
+            else if (_userGroups.isEmpty)
+              Text(
+                'Aún no has creado grupos en "Mis plantas".',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.slateLight,
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _userGroups.map((group) {
+                  final groupId = group['id']?.toString();
+                  final groupName = group['name']?.toString() ?? '';
+                  final iconData = PlantGroupIcons.resolve(
+                    group['icon_name']?.toString(),
+                  );
+                  final isSelected = _selectedGroupId == groupId;
+
+                  return ChoiceChip(
+                    showCheckmark: false,
+                    avatar: Icon(
+                      iconData,
+                      size: 16,
+                      color: isSelected ? AppColors.primary : AppColors.slate,
+                    ),
+                    label: Text(groupName),
+                    selected: isSelected,
+                    selectedColor: AppColors.mint,
+                    backgroundColor: AppColors.pageBg,
+                    labelStyle: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: isSelected ? AppColors.primary : AppColors.slate,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      side: BorderSide(
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.border,
                       ),
                     ),
-                  )
-                : _userGroups.isEmpty
-                ? Text(
-                    'No hay grupos disponibles',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.slateLight,
-                    ),
-                  )
-                : Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _userGroups.map((group) {
-                      final groupId = group['id'] as String?;
-                      final isSelected = _selectedGroupId == groupId;
-                      return ChoiceChip(
-                        label: Text(group['name'] as String? ?? ''),
-                        selected: isSelected,
-                        selectedColor: AppColors.mint,
-                        backgroundColor: AppColors.pageBg,
-                        labelStyle: GoogleFonts.inter(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.slate,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.border,
-                          ),
-                        ),
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedGroupId = selected ? groupId : null;
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedGroupId = selected ? groupId : null;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
             const SizedBox(height: 28),
 
             // Botones Guardar / Cancelar
@@ -198,6 +213,7 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -206,9 +222,9 @@ class _EditPlantDialogState extends State<EditPlantDialog> {
                   onPressed: _handleSave,
                   child: Text(
                     'Guardar',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       color: AppColors.white,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

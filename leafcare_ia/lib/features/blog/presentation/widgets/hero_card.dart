@@ -48,7 +48,7 @@ class HeroCard extends StatelessWidget {
                       ? Image.network(
                           article.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (_, _, _) =>
                               _CategoryFallback(category: article.category),
                         )
                       : _CategoryFallback(category: article.category),

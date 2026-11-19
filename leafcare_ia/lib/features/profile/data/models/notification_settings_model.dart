@@ -1,29 +1,52 @@
-/// Preferencias de avisos que se guardan en la colección `users`.
 class NotificationSettingsModel {
   const NotificationSettingsModel({
     required this.pushEnabled,
-    required this.dailyEmail,
-    required this.weeklyEmail,
+    required this.dailyEmailSummary,
+    required this.weeklyEmailSummary,
+    required this.userEmail,
   });
 
-  /// Avisos dentro de la aplicación (notificaciones push).
   final bool pushEnabled;
+  final bool dailyEmailSummary;
+  final bool weeklyEmailSummary;
+  final String userEmail;
 
-  /// Resumen por correo todos los días.
-  final bool dailyEmail;
-
-  /// Resumen por correo una vez por semana.
-  final bool weeklyEmail;
+  int get activeCount =>
+      (pushEnabled ? 1 : 0) +
+      (dailyEmailSummary ? 1 : 0) +
+      (weeklyEmailSummary ? 1 : 0);
 
   NotificationSettingsModel copyWith({
     bool? pushEnabled,
-    bool? dailyEmail,
-    bool? weeklyEmail,
+    bool? dailyEmailSummary,
+    bool? weeklyEmailSummary,
+    String? userEmail,
   }) {
     return NotificationSettingsModel(
       pushEnabled: pushEnabled ?? this.pushEnabled,
-      dailyEmail: dailyEmail ?? this.dailyEmail,
-      weeklyEmail: weeklyEmail ?? this.weeklyEmail,
+      dailyEmailSummary: dailyEmailSummary ?? this.dailyEmailSummary,
+      weeklyEmailSummary: weeklyEmailSummary ?? this.weeklyEmailSummary,
+      userEmail: userEmail ?? this.userEmail,
     );
+  }
+
+  factory NotificationSettingsModel.fromProfileRow({
+    required Map<String, dynamic>? row,
+    required String userEmail,
+  }) {
+    return NotificationSettingsModel(
+      pushEnabled: row?['push_notifications_enabled'] as bool? ?? false,
+      dailyEmailSummary: row?['daily_email_summary'] as bool? ?? false,
+      weeklyEmailSummary: row?['weekly_email_summary'] as bool? ?? false,
+      userEmail: userEmail.trim(),
+    );
+  }
+
+  Map<String, dynamic> toProfileUpdateJson() {
+    return {
+      'push_notifications_enabled': pushEnabled,
+      'daily_email_summary': dailyEmailSummary,
+      'weekly_email_summary': weeklyEmailSummary,
+    };
   }
 }
