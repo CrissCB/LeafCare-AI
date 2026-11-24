@@ -34,8 +34,8 @@ class ApiConstants {
   // ---------------------------------------------------------------------------
   static const String geminiBaseUrl =
       'https://generativelanguage.googleapis.com/v1beta';
-  static const String geminiVisionModel = 'gemini-2.5-flash';
-  static const String geminiFallbackModel = 'gemini-2.5-flash-lite';
+  static const String geminiVisionModel = 'gemini-3.8-flash';
+  static const String geminiFallbackModel = 'gemini-3.8-flash-lite';
 
   static String get geminiApiKey => (dotenv.env['GEMINI_API_KEY'] ?? '').trim();
 

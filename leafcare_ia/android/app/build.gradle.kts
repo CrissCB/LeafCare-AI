@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.leafcare_ia"
-    compileSdk = 35
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,8 +16,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.leafcare_ia"
-        minSdk = 23
-        targetSdk = 35
+        minSdk = flutter.minSdkVersion
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
