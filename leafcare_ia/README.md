@@ -1,17 +1,14 @@
 # leafcare_ia
 
-A new Flutter project.
+Proyecto Flutter de **LeafCare AI**.
 
-## Getting Started
+La documentación completa —funcionalidad, tecnologías, requisitos, configuración del `.env` y comandos de ejecución— está en el [README principal del repositorio](../README.md).
 
-This project is a starting point for a Flutter application.
+Para empezar:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Recuerda crear `leafcare_ia/.env` con las credenciales antes de ejecutar la app. Ese archivo no se sube a Git.
