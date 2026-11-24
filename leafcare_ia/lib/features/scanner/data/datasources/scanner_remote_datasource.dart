@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 
@@ -459,7 +460,14 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta:
         )
         .timeout(const Duration(seconds: 25));
 
+    // if (response.statusCode != 200) {
+    //   throw const ScannerException(
+    //     'No se pudo completar el análisis de salud por IA. Intenta de nuevo.',
+    //   );
+    // }
+
     if (response.statusCode != 200) {
+      debugPrint('Gemini HTTP ${response.statusCode}: ${response.body}');
       throw const ScannerException(
         'No se pudo completar el análisis de salud por IA. Intenta de nuevo.',
       );
